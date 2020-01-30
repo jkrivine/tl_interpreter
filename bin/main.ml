@@ -1,2 +1,2 @@
-open TlInterpretLib
-let () = print_string "ok"
+open Tl_interpreter_lib
+let () = print_string "ok\n"
