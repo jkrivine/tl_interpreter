@@ -1,21 +1,32 @@
-module MM = Map.Make(struct type t = int let compare x y = compare x y end)
+open Base
 
-type pos = {
-  id: int;
-  fwd: conditions;
-  bwd: provisions
+type user = int
+type time = int
+type amount = int
+
+type pos = int
+
+type segment = {
+  sel_pos: pos;
+  buy_pos: pos;
+  fwd_contract: pos (clause list) Map.Poly.t;
+  bwd_contract: clause list;
+  boxes: (box * user) amount Map.Poly.t;
 }
 
-and
+type line = {
+  owners: pos user Map.Poly.t;
+  next: pos (pos option) Map.Poly.t;
+  prev: pos (pos option) Map.Poly.t;
+}
 
-time = int
-and
-time_conditions = MM
-and
-conditions = time_conditions Map.Make(struct
-                                      type t = pos
-                                      let compare x y = compare x.id y.id end).t
-and
-provisions = bool
+type test = BoxHas of box*amount | BoxEmpty of box
+type act = EmptyBox of box
 
+type clause = {
+  from: time option;
+to: time option;
+  test: test list;
+  act: act list;
+}
 
