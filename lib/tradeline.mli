@@ -1,6 +1,5 @@
 include module type of Tradeline_types
 
-
 (**[transfer tl p player] transfer ownership of position [p] to [player]*)
 val transfer : tradeline -> pos -> addr -> tradeline
 
@@ -13,11 +12,13 @@ NB(ext) caller should be owner of [p+]
 *)
 val reduce : tradeline -> pos -> side -> time -> clause -> (tradeline * payoff)
 
-(*val gc:
-val grow:
-val bind:
-val unbind:
-*)
+val gc: tradeline -> pos -> side -> time -> pos option -> clause -> (tradeline*amount)
+
+val init : addr -> tradeline
+
+val grow: tradeline -> segment -> tradeline
+val bind: tradeline -> asset -> tradeline
+val unbind: tradeline -> (tradeline*asset option)
 
 
 

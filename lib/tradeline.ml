@@ -1,17 +1,36 @@
 include Tradeline_types
 
-let transfer tl p player = assert false
 
-(**[provision tl p player a] provisions [a] coins to segment after position [p] for [player], NB(ext) anyone can call*)
-let provision tl p player a = assert false
+let (|?) a default = Option.value a ~default
 
-let reduce tl p s t c = assert false
+let ledger_balance ledger player =
+  Option.value (MP.find ledger player) 0
 
-(*val gc:
-val grow:
-val bind:
-val unbind:
-*)
+let transfer tl pos player =
+  {tl with owners = MP.set tl.owners pos player}
 
+let default_segment = {
+  fwd_contract = MP.empty;
+  bwd_contract = [];
+  ledger = MP.empty
+}
 
+let provision tl pos player amount =
+  {tl with segments = MP.change tl.segments pos
+  (fun s_opt ->
+    let segment = s_opt |? default_segment in
+    let update_amount a_opt = Some (amount + (a_opt |? 0)) in
+    Some {segment with ledger = MP.change segment.ledger player update_amount}
+  )}
 
+let reduce tl pos side time clause = failwith "Not implemented"
+
+let gc tl pos side time p_opt clause = failwith "Not implemented"
+
+let init addr = failwith "Not implemented"
+
+let grow tl segment = failwith "Not implemented"
+
+let bind tl asset = failwith "Not implemented"
+
+let unbind tl = failwith "Not implemented"

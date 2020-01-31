@@ -1,7 +1,9 @@
 (* See
- * https://discuss.ocaml.org/t/avoiding-duplicated-definitions-in-module-implementation-and-interface/1546/4
+ *
+https://discuss.ocaml.org/t/avoiding-duplicated-definitions-in-module-implementation-and-interface/1546/4
 *)
-open Base
+(*open Base*)
+module MP = Base.Map.Poly
 
 type addr = int (*user/contract address*)
 and time = int (*block number*)
@@ -19,17 +21,18 @@ and clause = {
 
 
 and segment = {
-  fwd_contract : (pos, clause list) Map.Poly.t; (*pos -> c_1 or ... or c_n*)
+  fwd_contract : (pos, clause list) MP.t; (*pos -> c_1 or ... or c_n*)
   bwd_contract : clause list;
-  ledger : (addr, amount) Map.Poly.t;
+  ledger : (addr, amount) MP.t;
 }
 
 and tradeline = {
-  owners: (pos, addr) Map.Poly.t;
-  next: (pos, pos option) Map.Poly.t;
-  prev: (pos, pos option) Map.Poly.t;
-  underlying : asset option; (*Future: pos (asset list) Map.Poly.t*)
-  segments : (pos, segment option) Map.Poly.t; (*[segments.find u] returns the segment between u and u+*)
+  max_pos: pos; (* Source of fresh pos numbers; could be random int *)
+  owners: (pos, addr) MP.t;
+  next: (pos, pos) MP.t;
+  prev: (pos, pos) MP.t;
+  underlying : asset option; (*Future: pos (asset list) MP.t*)
+  segments : (pos, segment) MP.t; (*[segments.find u] returns the segment between u and u+*)
   (*!!Warning: segments is invariant under backward but is modified by forward.*)
 }
 
@@ -38,6 +41,6 @@ and testExpr = LedgerHas of side * amount | TradeLineHas of asset | Not of testE
 (** [Give a s] Give amount [a] to side [s]*)
 and effectExpr = Give of amount * side
 
-and payoff = (addr, amount) Map.Poly.t
+and payoff = (addr, amount) MP.t
 
 exception Throws
