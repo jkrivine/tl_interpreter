@@ -10,7 +10,7 @@ val provision : tradeline -> pos -> addr -> amount -> tradeline
 [reduce tl p Buyer t c] Forward reduction of [p+] at time [t] on clause [c].
 NB(ext) caller should be owner of [p+]
 *)
-val reduce : tradeline -> pos -> side -> time -> clause -> (tradeline * payoff)
+val reduce : tradeline -> pos -> side -> time -> clause -> tradeline
 
 val gc: tradeline -> pos -> side -> time -> pos option -> clause -> (tradeline*amount)
 

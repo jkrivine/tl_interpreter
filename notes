@@ -1,0 +1,17 @@
+# On orphaned ledgers:
+  After 
+
+  ```
+    u --K-- v --K'-- w
+           Fv
+        u --K'-- w
+  ```
+
+  The K segment (containing a provisioned ledger) is orphaned. In a
+  real-world implementation, ledgers would be flat, that is: not
+  contained in a segment but with its own id. Here for simplicity (?) I
+  use the fact that the token v was also detached from the tradeline and
+  I associate K to v. That way K can be gc'ed and there is a trace of
+  that gc operation in the tradeline.
+
+Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ... (tradeline*payoff)` is not necessary and `reduce : ... -> tradeline` is sufficient) since even without an environment, the transferred provisions can stay in the segment's ledger.

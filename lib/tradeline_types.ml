@@ -15,8 +15,8 @@ and pos = int (*Special NFT for positions*)
 and clause = {
   t_from: time option; (*None for 0*)
   t_to: time option; (*None for +infty*)
-  test : testExpr list; (* t_1 and ... and t_k*)
-  effect : effectExpr list; (* eff_1 ; ... ; eff_q *)
+  tests : testExpr list; (* t_1 and ... and t_k*)
+  effects : effectExpr list; (* eff_1 ; ... ; eff_q *)
 }
 
 
@@ -27,6 +27,10 @@ and segment = {
 }
 
 and tradeline = {
+  source: pos; (* First position of the tradeline *)
+  (* Invariant: the source cannot be evicted; any position with next=prev=null
+   * is evicted, unless they are the source. In that case the tradeline is a
+   * singleton *)
   max_pos: pos; (* Source of fresh pos numbers; could be random int *)
   owners: (pos, addr) MP.t;
   next: (pos, pos) MP.t;
@@ -37,7 +41,7 @@ and tradeline = {
 }
 
 and side = Seller | Buyer
-and testExpr = LedgerHas of side * amount | TradeLineHas of asset | Not of testExpr
+and testExpr = LedgerHas of amount * side | TradeLineHas of asset | Not of testExpr
 (** [Give a s] Give amount [a] to side [s]*)
 and effectExpr = Give of amount * side
 
