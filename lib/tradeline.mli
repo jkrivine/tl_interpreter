@@ -17,6 +17,10 @@ val gc: tradeline -> pos -> addr -> (tradeline*amount)
 val init : addr -> tradeline
 
 val grow: tradeline -> segment -> tradeline
+
+(* Throws if given provision has no segment *)
+(* Provisioning a dead, gc-able provision is fine *)
+val provision : tradeline -> pos -> addr -> amount -> tradeline
 val bind: tradeline -> asset -> tradeline
 val unbind: tradeline -> (tradeline*asset option)
 

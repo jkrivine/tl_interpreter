@@ -128,9 +128,45 @@ let gc tl seller_pos addr =
       else (tl,0)
 
 
-let init addr = failwith "Not implemented"
+let init addr =
+  let pos = 0 in
+  {
+    source = pos;
+    max_pos = pos;
+    owners = MP.singleton pos addr;
+    next = MP.empty;
+    prev = MP.empty;
+    underlying = None;
+    segments = MP.empty;
+  }
 
-let grow tl segment = failwith "Not implemented"
+(* should be cached in concrete implementations *)
+let get_sink tl =
+  let rec get_sink' pos = match MP.find tl.next pos with
+    | None -> pos
+    | Some pos' -> get_sink' pos' in
+  get_sink' tl.source
+
+
+let grow tl segment =
+  let pos = tl.max_pos + 1 in
+  let sink = get_sink tl in
+  {tl with
+   max_pos = pos;
+   owners = MP.set tl.owners pos (MP.find_exn tl.owners sink);
+   next = MP.set tl.next pos sink;
+   prev = MP.set tl.prev sink pos;
+   underlying = None;
+   segments = MP.set tl.segments pos segment;
+  }
+
+let provision tl pos addr amount  =
+  let segments = MP.update tl.segments pos (function
+      | None -> raise Throws
+      | Some segment ->
+        let ledger = MP.update segment.ledger addr (fun a_opt -> (a_opt |? 0) + amount) in
+        { segment with ledger})
+  in { tl with segments }
 
 let bind tl asset = failwith "Not implemented"
 

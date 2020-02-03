@@ -20,12 +20,10 @@ Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ... (tr
 
 JK: similar to the above point. If you GC on the fly you can compute the payoff immediately.
 
-Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ...
-(tradeline*payoff)` is not necessary and `reduce : ... -> tradeline` is
-sufficient) since even without an environment, the transferred provisions can
-stay in the segment's ledger.
-
 # Possible states for positions
+For a position pos, here are the possible states of pos depending on
+whether `tl.next pos`, `tl.prev pos`, and `tl.segments pos` are defined or not.
+
   Next   Prev  Segment     Status
 
    ✔      ✗      ✔         source
