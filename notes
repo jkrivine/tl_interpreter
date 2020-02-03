@@ -19,3 +19,27 @@ JK: isn't that problem a consequence of the fact you don't want GC to operate in
 Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ... (tradeline*payoff)` is not necessary and `reduce : ... -> tradeline` is sufficient) since even without an environment, the transferred provisions can stay in the segment's ledger.
 
 JK: similar to the above point. If you GC on the fly you can compute the payoff immediately.
+
+Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ...
+(tradeline*payoff)` is not necessary and `reduce : ... -> tradeline` is
+sufficient) since even without an environment, the transferred provisions can
+stay in the segment's ledger.
+
+# Possible states for positions
+  Next   Prev  Segment     Status
+
+   ✔      ✗      ✔         source
+
+   ✔      ✔      ✔         middle
+
+   ✗      ✔      ✗         sink
+
+   ✗      ✗      ✗         fresh if pos > tl.max_pos, unreachable if pos <= tl.max_pos
+
+   ✗      ✗      ✔         gc-able / gc-ed
+
+   ✗      ✔      ✔         unreachable
+
+   ✔      ✔      ✗         unreachable
+
+   ✔      ✗      ✗         unreachable

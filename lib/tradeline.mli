@@ -12,7 +12,7 @@ NB(ext) caller should be owner of [p+]
 *)
 val reduce : tradeline -> pos -> side -> time -> clause -> tradeline
 
-val gc: tradeline -> pos -> side -> time -> pos option -> clause -> (tradeline*amount)
+val gc: tradeline -> pos -> addr -> (tradeline*amount)
 
 val init : addr -> tradeline
 
