@@ -1,6 +1,7 @@
 include Tradeline_types
 
 let (|?) a default = Option.value a ~default
+let throw msg = raise (Throws msg)
 
 
 let ledger_balance ledger player =
@@ -15,6 +16,7 @@ let default_segment = {
   ledger = MP.empty
 }
 
+(**[provision tl pos player a] [player] provisions [a] in the ledger of the segement at position [pos]*)
 let provision tl pos player amount =
   let segments = MP.update tl.segments pos
       (fun s_opt ->
@@ -25,64 +27,66 @@ let provision tl pos player amount =
       )
   in {tl with segments}
 
-
-(*val reduce : tradeline -> pos -> side -> time -> clause -> (tradeline * payoff)*)
-
-let run_tests seller_a buyer_a asset_opt tests =
+let run_tests seller_deposit buyer_deposit asset_opt tests =
   let rec run_test' = function
     | Not t -> not (run_test' t)
     | LedgerHas (amount,side) -> (match side with
-        | Seller -> seller_a >= amount
-        | Buyer -> buyer_a >= amount)
+                                  | Seller -> seller_deposit >= amount
+                                  | Buyer -> buyer_deposit >= amount)
     | TradeLineHas asset' -> (match asset_opt with
-        | Some asset -> asset = asset'
-        | None -> false) in
+                              | Some asset -> asset = asset'
+                              | None -> false) in
   List.for_all run_test' tests
 
 
-let run_effects effects : amount=
-  let rec run_effects' seller_payoff = function
+(**Generate the required payoff w/o applying it to the ledger*)
+let compute_effects effects : amount =
+  let rec compute_effects' seller_payoff = function
     | [] -> seller_payoff
-    | Give (a,Seller)::ls -> run_effects' (seller_payoff + a) ls
-    | Give (a,Buyer)::ls -> run_effects' (seller_payoff - a) ls in
-  run_effects' 0 effects
+    | Give (a,Seller)::ls -> compute_effects' (seller_payoff + a) ls
+    | Give (a,Buyer)::ls -> compute_effects' (seller_payoff - a) ls in
+  compute_effects' 0 effects
 
+(*At some point we thought GC would occur as a consequence of unsatisfiable time/past-token condition*)
+(*Also reducing backwards (forw.) should be done by the owner of seller (buyer) position, we do not check this here?*)
 let reduce tl seller_pos reducer time clause =
   let buyer_pos = MP.find_exn tl.next seller_pos in
   let segment = MP.find_exn tl.segments seller_pos in
   let seller = MP.find_exn tl.owners seller_pos in
   let buyer = MP.find_exn tl.owners buyer_pos in
-  let seller_amount = MP.find segment.ledger seller |? 0 in
-  let buyer_amount = MP.find segment.ledger buyer |? 0 in
+  let seller_deposit = MP.find segment.ledger seller |? 0 in
+  let buyer_deposit = MP.find segment.ledger buyer |? 0 in
 
   (* Possible error conditions *)
-  let bad_time =
+  let bad_time () =
     (clause.t_from <> None && Option.get clause.t_from > time)
-    || (clause.t_to <> None && Option.get clause.t_to < time) in
-  let clause_not_found =
+    || (clause.t_to <> None && Option.get clause.t_to < time)
+  in
+  let clause_not_found () =
     match reducer with
     | Seller -> not (List.mem clause segment.bwd_contract)
     | Buyer -> (match MP.find segment.fwd_contract seller_pos with
         | None -> false
-        | Some lst -> List.mem clause lst) in
-  let test_fail =
-    not (run_tests seller_amount buyer_amount tl.underlying clause.tests) in
-
-  if bad_time || clause_not_found || test_fail then
-    raise Throws
+        | Some lst -> List.mem clause lst)
+  in
+  let test_fail () =
+    not (run_tests seller_deposit buyer_deposit tl.underlying clause.tests)
+  in
+  if (bad_time() || clause_not_found() || test_fail()) then
+    throw "Clause precondition evaluates to false"
   else
     (* Apply payoffs to segment ledger *)
-    let seller_payoff = run_effects clause.effects in (* buyer payoff is symmetric *)
-    let seller_final = seller_amount + seller_payoff in
-    let s,b =
+    let seller_payoff = compute_effects clause.effects in (* buyer payoff is symmetric *)
+    let seller_final = seller_deposit + seller_payoff in
+    let seller_bal,buyer_bal =
       if seller_final < 0
-      then 0, buyer_amount + seller_amount
+      then 0, buyer_deposit + seller_deposit (*Seller defaults*)
       else
-        let buyer_final = buyer_amount - seller_payoff in
+        let buyer_final = buyer_deposit - seller_payoff in
         if buyer_final < 0
-        then seller_amount + buyer_amount, 0
+        then seller_deposit + buyer_deposit, 0 (*Buyer defaults*)
         else seller_final,buyer_final in
-    let segment = {segment with ledger=MP.set (MP.set segment.ledger buyer b) seller s} in
+    let segment = {segment with ledger=MP.set (MP.set segment.ledger buyer buyer_bal) seller seller_bal} in
 
     (* Reduce tradeline *)
     let next' = MP.remove (MP.remove tl.next buyer_pos) seller_pos
@@ -99,12 +103,12 @@ let reduce tl seller_pos reducer time clause =
       { tl with segments; next; prev }
     (* forward move *)
     | Buyer ->
-      let owners = MP.set tl.owners seller_pos buyer in
-      let segments' = (match MP.find tl.segments buyer_pos with
-          | None -> MP.remove tl.segments seller_pos
-          | Some segment' -> MP.set tl.segments seller_pos segment') in
-      let segments = MP.set segments' buyer_pos segment in
-      { tl with owners; segments; next; prev}
+       let owners = MP.set tl.owners seller_pos buyer in
+       let segments' = (match MP.find tl.segments buyer_pos with
+                        | None -> MP.remove tl.segments seller_pos
+                        | Some segment' -> MP.set tl.segments seller_pos segment') in
+       let segments = MP.set segments' buyer_pos segment in
+       { tl with owners; segments; next; prev}
 
 (* Implements gc for dead segments & segments where [addr] is not a party.
    Does not implement time-based gc

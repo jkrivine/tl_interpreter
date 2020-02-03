@@ -47,4 +47,4 @@ and effectExpr = Give of amount * side
 
 and payoff = (addr, amount) MP.t
 
-exception Throws
+exception Throws of string
