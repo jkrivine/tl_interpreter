@@ -14,4 +14,8 @@
   I associate K to v. That way K can be gc'ed and there is a trace of
   that gc operation in the tradeline.
 
+JK: isn't that problem a consequence of the fact you don't want GC to operate in an opportunistic manner but only on demand? Because otherwise you could just GC the whole segement after the Fv reduction
+
 Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ... (tradeline*payoff)` is not necessary and `reduce : ... -> tradeline` is sufficient) since even without an environment, the transferred provisions can stay in the segment's ledger.
+
+JK: similar to the above point. If you GC on the fly you can compute the payoff immediately.
