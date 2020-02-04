@@ -16,16 +16,14 @@ let default_segment = {
   ledger = MP.empty
 }
 
-(**[provision tl pos player a] [player] provisions [a] in the ledger of the segement at position [pos]*)
-let provision tl pos player amount =
-  let segments = MP.update tl.segments pos
-      (fun s_opt ->
-         let segment = s_opt |? default_segment in
-         let update_amount a_opt = (amount + (a_opt |? 0)) in
-         let ledger = MP.update segment.ledger player update_amount in
-         {segment with ledger}
-      )
-  in {tl with segments}
+(**[provision tl pos addr a] [addr] provisions [a] in the ledger of the segement at position [pos]*)
+let provision tl pos addr amount  =
+  let segments = MP.update tl.segments pos (function
+      | None -> throw "Segment does not exist"
+      | Some segment ->
+        let ledger = MP.update segment.ledger addr (fun a_opt -> (a_opt |? 0) + amount) in
+        { segment with ledger})
+  in { tl with segments }
 
 let run_tests seller_deposit buyer_deposit asset_opt tests =
   let rec run_test' = function
@@ -47,8 +45,6 @@ let compute_effects effects : amount =
     | Give (a,Buyer)::ls -> compute_effects' (seller_payoff - a) ls in
   compute_effects' 0 effects
 
-(*At some point we thought GC would occur as a consequence of unsatisfiable time/past-token condition*)
-(*Also reducing backwards (forw.) should be done by the owner of seller (buyer) position, we do not check this here?*)
 let reduce tl seller_pos reducer time clause =
   let buyer_pos = MP.find_exn tl.next seller_pos in
   let segment = MP.find_exn tl.segments seller_pos in
@@ -164,13 +160,6 @@ let grow tl segment =
    segments = MP.set tl.segments pos segment;
   }
 
-let provision tl pos addr amount  =
-  let segments = MP.update tl.segments pos (function
-      | None -> raise Throws
-      | Some segment ->
-        let ledger = MP.update segment.ledger addr (fun a_opt -> (a_opt |? 0) + amount) in
-        { segment with ledger})
-  in { tl with segments }
 
 let bind tl asset = failwith "Not implemented"
 
