@@ -19,7 +19,6 @@ and clause = {
   effects : effectExpr list; (* eff_1 ; ... ; eff_q *)
 }
 
-
 and segment = {
   fwd_contract : (pos, clause list) MP.t; (*pos -> c_1 or ... or c_n*)
   bwd_contract : clause list;

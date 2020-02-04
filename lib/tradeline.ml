@@ -62,8 +62,8 @@ let reduce tl seller_pos reducer time clause =
     match reducer with
     | Seller -> not (List.mem clause segment.bwd_contract)
     | Buyer -> (match MP.find segment.fwd_contract seller_pos with
-        | None -> false
-        | Some lst -> List.mem clause lst)
+        | None -> true
+        | Some lst -> not (List.mem clause lst))
   in
   let test_fail () =
     not (run_tests seller_deposit buyer_deposit tl.underlying clause.tests)
