@@ -3,9 +3,8 @@ include Tradeline_types
 let (|?) a default = Option.value a ~default
 let throw msg = raise (Throws msg)
 
-
 let ledger_balance ledger player =
-  Option.value (MP.find ledger player) 0
+  Option.value (MP.find ledger player) ~default:0
 
 let transfer tl pos player =
   {tl with owners = MP.set tl.owners pos player}
@@ -58,11 +57,11 @@ let reduce tl seller_pos reducer time clause =
     (clause.t_from <> None && Option.get clause.t_from > time)
     || (clause.t_to <> None && Option.get clause.t_to < time)
   in
-  let clause_not_found () =
+  let clause_not_found () = (*Eventually will be a test that a given clause hsh indeed matches a clause*)
     match reducer with
     | Seller -> not (List.mem clause segment.bwd_contract)
     | Buyer -> (match MP.find segment.fwd_contract seller_pos with
-        | None -> true
+        | None -> true (*No fwd contract is attached to seller_pos, this should be impossible ?*)
         | Some lst -> not (List.mem clause lst))
   in
   let test_fail () =
@@ -72,7 +71,7 @@ let reduce tl seller_pos reducer time clause =
     throw "Clause precondition evaluates to false"
   else
     (* Apply payoffs to segment ledger *)
-    let seller_payoff = compute_effects clause.effects in (* buyer payoff is symmetric *)
+    let seller_payoff = compute_effects clause.effects in (* buyer payoff is symmetric, seller_payoff may be negative *)
     let seller_final = seller_deposit + seller_payoff in
     let seller_bal,buyer_bal =
       if seller_final < 0
@@ -82,7 +81,7 @@ let reduce tl seller_pos reducer time clause =
         if buyer_final < 0
         then seller_deposit + buyer_deposit, 0 (*Buyer defaults*)
         else seller_final,buyer_final in
-    let segment = {segment with ledger=MP.set (MP.set segment.ledger buyer buyer_bal) seller seller_bal} in
+    let segment = {segment with ledger = MP.set (MP.set segment.ledger buyer buyer_bal) seller seller_bal} in
 
     (* Reduce tradeline *)
     let next' = MP.remove (MP.remove tl.next buyer_pos) seller_pos
