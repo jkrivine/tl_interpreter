@@ -168,6 +168,11 @@ let provision tl pos addr amount  =
         { segment with ledger})
   in { tl with segments }
 
-let bind tl asset = failwith "Not implemented"
+let bind tl asset =
+  let underlying = match tl.underlying with
+       | None -> Some asset
+       | Some _ -> failwith "Cannot change underlying of a tradeline" in
+  { tl with underlying }
 
-let unbind tl = failwith "Not implemented"
+let unbind tl = ({ tl with underlying = None }, tl.underlying)
+
