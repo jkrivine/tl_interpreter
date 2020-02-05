@@ -9,45 +9,32 @@ let transfer tl pos player =
 let default_segment = {
   fwd_contract = MP.empty;
   bwd_contract = [];
-  ledger = MP.empty
 }
 
 (**[provision tl pos addr a] [addr] provisions [a] in the ledger of the segement at position [pos]*)
-let provision tl pos addr amount  =
-  let segments = MP.update tl.segments pos (function
-      | None -> throw "Segment does not exist"
-      | Some segment ->
-        let ledger = MP.update segment.ledger addr (fun a_opt -> (a_opt |? 0) + amount) in
-        { segment with ledger})
-  in { tl with segments }
+let provision tl pos amount  =
+  let provision = MP.update tl.provision pos (fun a_opt -> (a_opt |? 0) + amount) in
+  { tl with provision}
 
-let run_tests seller_deposit buyer_deposit asset_opt tests =
-  let rec run_test' = function
-    | Not t -> not (run_test' t)
-    | LedgerHas (amount,side) -> (match side with
-                                  | Seller -> seller_deposit >= amount
-                                  | Buyer -> buyer_deposit >= amount)
-    | TradeLineHas asset' -> (match asset_opt with
-                              | Some asset -> asset = asset'
-                              | None -> false) in
-  List.for_all run_test' tests
-
+(*!!! Function does not deal with repeated tests of the same amount !!!!*)
+let rec run_tests buyer_deposit seller_deposit = function
+    (BuyerHas a)::tests -> (buyer_deposit >= a) && (run_tests buyer_deposit seller_deposit tests)
+  | (SellerHas a)::tests -> (buyer_deposit >= a) && (run_tests buyer_deposit seller_deposit tests)
+  | (Not t')::tests -> not (run_tests buyer_deposit seller_deposit [t']) && (run_tests buyer_deposit seller_deposit tests)
+  | [] -> true
 
 (**Generate the required payoff w/o applying it to the ledger*)
-let compute_effects effects : amount =
-  let rec compute_effects' seller_payoff = function
-    | [] -> seller_payoff
-    | Give (a,Seller)::ls -> compute_effects' (seller_payoff + a) ls
-    | Give (a,Buyer)::ls -> compute_effects' (seller_payoff - a) ls in
-  compute_effects' 0 effects
+let compute_effects buyer_deposit a =
+  if buyer_deposit >= a then (a,buyer_deposit-a)
+  else (buyer_deposit,0)
 
-let reduce tl seller_pos reducer time clause =
-  let buyer_pos = MP.find_exn tl.next seller_pos in
-  let segment = MP.find_exn tl.segments seller_pos in
-  let seller = MP.find_exn tl.owners seller_pos in
-  let buyer = MP.find_exn tl.owners buyer_pos in
-  let seller_deposit = MP.find segment.ledger seller |? 0 in
-  let buyer_deposit = MP.find segment.ledger buyer |? 0 in
+let reduce tl segment_pos reducer time clause =
+
+  let buyer_pos = MP.find_exn tl.next segment_pos in
+  let seller_pos = segment_pos in
+  let segment = MP.find_exn tl.segments segment_pos in
+  let seller_deposit = MP.find tl.provision segment_pos |? 0 in
+  let buyer_deposit = MP.find tl.provision buyer_pos |? 0 in
 
   (* Possible error conditions *)
   let bad_time () =
@@ -57,28 +44,19 @@ let reduce tl seller_pos reducer time clause =
   let clause_not_found () = (*Eventually will be a test that a given clause hsh indeed matches a clause*)
     match reducer with
     | Seller -> not (List.mem clause segment.bwd_contract)
-    | Buyer -> (match MP.find segment.fwd_contract seller_pos with
+    | Buyer -> (match MP.find segment.fwd_contract segment_pos with
         | None -> true (*No fwd contract is attached to seller_pos, this should be impossible ?*)
         | Some lst -> not (List.mem clause lst))
   in
   let test_fail () =
-    not (run_tests seller_deposit buyer_deposit tl.underlying clause.tests)
+    not (run_tests seller_deposit buyer_deposit clause.tests)
   in
   if (bad_time() || clause_not_found() || test_fail()) then
     throw "Clause precondition evaluates to false"
   else
-    (* Apply payoffs to segment ledger *)
-    let seller_payoff = compute_effects clause.effects in (* buyer payoff is symmetric, seller_payoff may be negative *)
-    let seller_final = seller_deposit + seller_payoff in
-    let seller_bal,buyer_bal =
-      if seller_final < 0
-      then 0, buyer_deposit + seller_deposit (*Seller defaults*)
-      else
-        let buyer_final = buyer_deposit - seller_payoff in
-        if buyer_final < 0
-        then seller_deposit + buyer_deposit, 0 (*Buyer defaults*)
-        else seller_final,buyer_final in
-    let segment = {segment with ledger = MP.set (MP.set segment.ledger buyer buyer_bal) seller seller_bal} in
+    let seller_payoff,buyer_payoff =
+      compute_effects buyer_deposit clause.effect
+    in
 
     (* Reduce tradeline *)
     let next' = MP.remove (MP.remove tl.next buyer_pos) seller_pos in
