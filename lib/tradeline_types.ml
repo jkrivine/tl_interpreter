@@ -44,7 +44,6 @@ and tradeline = {
   max_pos: pos; (* Source of fresh pos numbers; could be random int *)
   owners: (pos, addr) MP.t;
   next: (pos, pos) MP.t;
-  prev: (pos, pos) MP.t;
   underlying : asset option; (*Future: pos (asset list) MP.t*)
   segments : (pos, segment) MP.t; (*[segments.find u] returns the segment between u and u+*)
   (*!!Warning: segments is invariant under backward but is modified by forward.*)

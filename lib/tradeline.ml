@@ -3,9 +3,6 @@ include Tradeline_types
 let (|?) a default = Option.value a ~default
 let throw msg = raise (Throws msg)
 
-let ledger_balance ledger player =
-  Option.value (MP.find ledger player) ~default:0
-
 let transfer tl pos player =
   {tl with owners = MP.set tl.owners pos player}
 
@@ -84,18 +81,18 @@ let reduce tl seller_pos reducer time clause =
     let segment = {segment with ledger = MP.set (MP.set segment.ledger buyer buyer_bal) seller seller_bal} in
 
     (* Reduce tradeline *)
-    let next' = MP.remove (MP.remove tl.next buyer_pos) seller_pos
-    and prev' = MP.remove tl.prev buyer_pos in
-    let next,prev = match MP.find tl.next buyer_pos with
-      | None -> next', prev'
-      | Some pos' -> MP.set next' seller_pos pos', MP.set prev' pos' seller_pos in
+    let next' = MP.remove (MP.remove tl.next buyer_pos) seller_pos in
+    let next = match MP.find tl.next buyer_pos with
+      | None -> next'
+      | Some pos' -> MP.set next' seller_pos pos'
+    in
     match reducer with
     (* backward move *)
     | Seller ->
       let segments = (match MP.find tl.segments buyer_pos with
           | None -> MP.remove (MP.set tl.segments buyer_pos segment) seller_pos
           | Some _ -> MP.set tl.segments seller_pos segment) in
-      { tl with segments; next; prev }
+      { tl with segments; next}
     (* forward move *)
     | Buyer ->
        let owners = MP.set tl.owners seller_pos buyer in
@@ -103,26 +100,26 @@ let reduce tl seller_pos reducer time clause =
                         | None -> MP.remove tl.segments seller_pos
                         | Some segment' -> MP.set tl.segments seller_pos segment') in
        let segments = MP.set segments' buyer_pos segment in
-       { tl with owners; segments; next; prev}
+       { tl with owners; segments; next}
 
-(* Implements gc for dead segments & segments where [addr] is not a party.
-   Does not implement time-based gc
+(* Orphan segments are globally gc-able
+   segments where [addr] is not a party in the ledger is addr gc-able.
 *)
-let gc tl seller_pos addr =
-  match MP.find tl.segments seller_pos with
+let gc tl segment_pos addr =
+  match MP.find tl.segments segment_pos with
   | None -> (tl,0)
   | Some segment ->
     match MP.find segment.ledger addr with
     | None -> (tl,0)
     | Some amount ->
-      let can_gc = (match MP.find tl.next seller_pos with
+      let can_gc = (match MP.find tl.next segment_pos with
           (* No next pos with associated segment means an orphaned token+segment *)
           | None -> true
           (* Otherwise, gc possible if addr is not a current party to the segment *)
-          | Some buyer_pos -> addr <> MP.find_exn tl.owners seller_pos && addr <> MP.find_exn tl.owners buyer_pos) in
+          | Some buyer_pos -> addr <> MP.find_exn tl.owners segment_pos && addr <> MP.find_exn tl.owners buyer_pos) in
       if can_gc then
         let ledger = MP.set segment.ledger addr 0 in
-        let segments = MP.set tl.segments seller_pos {segment with ledger} in
+        let segments = MP.set tl.segments segment_pos {segment with ledger} in
         ({ tl with segments }, amount)
       else (tl,0)
 
@@ -134,7 +131,6 @@ let init addr =
     max_pos = pos;
     owners = MP.singleton pos addr;
     next = MP.empty;
-    prev = MP.empty;
     underlying = None;
     segments = MP.empty;
   }
@@ -154,17 +150,16 @@ let grow tl segment =
    max_pos = pos;
    owners = MP.set tl.owners pos (MP.find_exn tl.owners sink);
    next = MP.set tl.next pos sink;
-   prev = MP.set tl.prev sink pos;
    underlying = None;
    segments = MP.set tl.segments pos segment;
   }
-
 
 let bind tl asset =
   let underlying = match tl.underlying with
        | None -> Some asset
        | Some _ -> failwith "Cannot change underlying of a tradeline" in
   { tl with underlying }
+
 
 let unbind tl = ({ tl with underlying = None }, tl.underlying)
 
