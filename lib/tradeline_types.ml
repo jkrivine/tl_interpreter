@@ -28,7 +28,7 @@ type clause = {
   t_from: time option; (*None for 0*)
   t_to: time option; (*None for +infty*)
   tests : testExpr list ;
-  effect : amount ;
+  effect : amount ; (*Pay amount to seller*)
 }
 type segment = {
   fwd_contract : (pos, clause list) MP.t; (*pos -> c_1 or ... or c_n*)
@@ -47,7 +47,6 @@ type tradeline = {
   (*!!Warning: segments is invariant under backward but is modified by forward.*)
 }
 
-
-type payoff = (addr, amount) MP.t
+type payoff = (addr option * amount) list
 
 exception Throws of string

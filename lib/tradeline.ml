@@ -3,38 +3,41 @@ include Tradeline_types
 let (|?) a default = Option.value a ~default
 let throw msg = raise (Throws msg)
 
-let transfer tl pos player =
-  {tl with owners = MP.set tl.owners pos player}
+let transfer tl pos player_opt =
+  match player_opt with
+    Some addr -> {tl with owners = MP.set tl.owners pos addr}
+  | None -> {tl with owners = MP.remove tl.owners pos} (*burning position*)
 
-let default_segment = {
-  fwd_contract = MP.empty;
-  bwd_contract = [];
-}
+let ownerOf tl pos =
+  MP.find tl.owners pos
 
-(**[provision tl pos addr a] [addr] provisions [a] in the ledger of the segement at position [pos]*)
+(**[provision tl pos a] provisions [a] in the ledger of position [pos]*)
 let provision tl pos amount  =
   let provision = MP.update tl.provision pos (fun a_opt -> (a_opt |? 0) + amount) in
   { tl with provision}
 
 (*!!! Function does not deal with repeated tests of the same amount !!!!*)
-let rec run_tests buyer_deposit seller_deposit = function
-    (BuyerHas a)::tests -> (buyer_deposit >= a) && (run_tests buyer_deposit seller_deposit tests)
-  | (SellerHas a)::tests -> (buyer_deposit >= a) && (run_tests buyer_deposit seller_deposit tests)
+let rec run_tests seller_deposit buyer_deposit = function
+    (BuyerHas a)::tests -> run_tests (buyer_deposit-a) seller_deposit tests
+  | (SellerHas a)::tests -> run_tests buyer_deposit (seller_deposit-a) tests
   | (Not t')::tests -> not (run_tests buyer_deposit seller_deposit [t']) && (run_tests buyer_deposit seller_deposit tests)
   | [] -> true
 
-(**Generate the required payoff w/o applying it to the ledger*)
+(**Generate the (positive) payoff <+s (from contract), +b (from emptying the deposit)> *)
 let compute_effects buyer_deposit a =
   if buyer_deposit >= a then (a,buyer_deposit-a)
   else (buyer_deposit,0)
 
+
+(*Current implementation does not allow one to do zero crossing, test should return a payoff*)
 let reduce tl segment_pos reducer time clause =
 
   let buyer_pos = MP.find_exn tl.next segment_pos in
-  let seller_pos = segment_pos in
-  let segment = MP.find_exn tl.segments segment_pos in
-  let seller_deposit = MP.find tl.provision segment_pos |? 0 in
   let buyer_deposit = MP.find tl.provision buyer_pos |? 0 in
+
+  let seller_deposit = MP.find tl.provision segment_pos |? 0 in
+  let segment = MP.find_exn tl.segments segment_pos in
+
 
   (* Possible error conditions *)
   let bad_time () =
@@ -54,53 +57,36 @@ let reduce tl segment_pos reducer time clause =
   if (bad_time() || clause_not_found() || test_fail()) then
     throw "Clause precondition evaluates to false"
   else
-    let seller_payoff,buyer_payoff =
+    let (s,b) =
       compute_effects buyer_deposit clause.effect
     in
-
+    let payoff = [(ownerOf tl segment_pos,s) ; (ownerOf tl buyer_pos,b)] in
     (* Reduce tradeline *)
-    let next' = MP.remove (MP.remove tl.next buyer_pos) seller_pos in
-    let next = match MP.find tl.next buyer_pos with
-      | None -> next'
-      | Some pos' -> MP.set next' seller_pos pos'
+
+    (*1. removing buyer position from tl and making seller position point to next buyer*)
+    let next_buyer = MP.find tl.next buyer_pos in (*possibly None*)
+    let next = (*segment_pos ---> next_buyer *)
+      MP.remove (match next_buyer with None -> tl.next | Some pos' -> MP.set tl.next segment_pos pos') buyer_pos
     in
+    let provision = MP.remove tl.provision buyer_pos in
+
+    (*2. update segments depending on the direction of the reduction*)
+
     match reducer with
+
     (* backward move *)
     | Seller ->
-      let segments = (match MP.find tl.segments buyer_pos with
-          | None -> MP.remove (MP.set tl.segments buyer_pos segment) seller_pos
-          | Some _ -> MP.set tl.segments seller_pos segment) in
-      { tl with segments; next}
+       let segments = MP.remove tl.segments buyer_pos in
+       (transfer {tl with segments ; next ; provision} buyer_pos None,payoff) (*burning buyer_pos*)
+
     (* forward move *)
     | Buyer ->
-       let owners = MP.set tl.owners seller_pos buyer in
-       let segments' = (match MP.find tl.segments buyer_pos with
-                        | None -> MP.remove tl.segments seller_pos
-                        | Some segment' -> MP.set tl.segments seller_pos segment') in
-       let segments = MP.set segments' buyer_pos segment in
-       { tl with owners; segments; next}
-
-(* Orphan segments are globally gc-able
-   segments where [addr] is not a party in the ledger is addr gc-able.
-*)
-let gc tl segment_pos addr =
-  match MP.find tl.segments segment_pos with
-  | None -> (tl,0)
-  | Some segment ->
-    match MP.find segment.ledger addr with
-    | None -> (tl,0)
-    | Some amount ->
-      let can_gc = (match MP.find tl.next segment_pos with
-          (* No next pos with associated segment means an orphaned token+segment *)
-          | None -> true
-          (* Otherwise, gc possible if addr is not a current party to the segment *)
-          | Some buyer_pos -> addr <> MP.find_exn tl.owners segment_pos && addr <> MP.find_exn tl.owners buyer_pos) in
-      if can_gc then
-        let ledger = MP.set segment.ledger addr 0 in
-        let segments = MP.set tl.segments segment_pos {segment with ledger} in
-        ({ tl with segments }, amount)
-      else (tl,0)
-
+       let segments =
+         match MP.find tl.segments buyer_pos with
+           Some segment' -> MP.set tl.segments segment_pos segment'
+         | None -> MP.remove tl.segments segment_pos
+       in
+       (transfer {tl with segments ; next ; provision} segment_pos (ownerOf tl buyer_pos),payoff) (*transfering ownership of seller_pos to buyer*)
 
 let init addr =
   let pos = 0 in
@@ -109,8 +95,8 @@ let init addr =
     max_pos = pos;
     owners = MP.singleton pos addr;
     next = MP.empty;
-    underlying = None;
     segments = MP.empty;
+    provision = MP.empty
   }
 
 (* should be cached in concrete implementations *)
@@ -128,16 +114,6 @@ let grow tl segment =
    max_pos = pos;
    owners = MP.set tl.owners pos (MP.find_exn tl.owners sink);
    next = MP.set tl.next pos sink;
-   underlying = None;
    segments = MP.set tl.segments pos segment;
   }
-
-let bind tl asset =
-  let underlying = match tl.underlying with
-       | None -> Some asset
-       | Some _ -> failwith "Cannot change underlying of a tradeline" in
-  { tl with underlying }
-
-
-let unbind tl = ({ tl with underlying = None }, tl.underlying)
 
