@@ -1,5 +1,5 @@
 include Tradeline_types
 
 type mother_contract = {
-    ledger : (addr, amount) MP.t;
+    ledger : Ledger.t
 }

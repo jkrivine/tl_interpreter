@@ -16,26 +16,46 @@ let provision tl pos amount  =
   let provision = MP.update tl.provision pos (fun a_opt -> (a_opt |? 0) + amount) in
   { tl with provision}
 
-let rec run_test reducer seller_deposit buyer_deposit test =
+let rec run_test reducer seller_deposit buyer_deposit test_list =
   let depo =
     match reducer with
       Seller -> buyer_deposit
     | Buyer -> seller_deposit
   in
-  match test with
-    Higher a -> depo >= a
-  | Lower a -> depo < a
+  let eval = function
+      Higher a -> depo >= a
+    | Lower a -> depo < a
+  in
+  List.for_all eval test_list
 
-(**Generate the (positive) payoff <+s (from contract), +b (from emptying the deposit)> *)
-let compute_effects reducer buyer_deposit a =
-  match reducer with
-    Buyer -> (buyer_deposit-a,a)
-  | Seller -> if buyer_deposit>=a then (buyer_deposit-a,a) else (0,buyer_deposit)
+
+
+let compute_effects reducer seller buyer buyer_init_depo (ledger:Ledger.t) effects =
+  let rec eval ledger effects buyer_current_depo =
+    match effects with
+      [] -> Ledger.add ledger buyer buyer_current_depo (*left over is given back to owner of buyer_depo*)
+    | (Pay a)::tl -> (*Active payment*)
+       begin
+         match reducer with
+           Buyer -> eval (Ledger.transfer ledger buyer seller a) tl buyer_current_depo
+         | Seller -> eval (Ledger.transfer ledger seller buyer a) tl buyer_current_depo
+       end
+    | (DrawUpTo a)::tl ->
+       begin
+         match reducer with
+           Buyer -> failwith "Illegal passive payment in a forward clause"
+         | Seller -> (*passive payment to seller taps into depo*)
+            let a' = min buyer_current_depo a in
+            eval (Ledger.add ledger seller a') tl (buyer_current_depo-a')
+       end
+  in
+  eval ledger effects buyer_init_depo
 
 (*Current implementation does not allow one to do zero crossing, test should return a payoff*)
-let reduce tl segment_pos reducer time clause =
+let reduce tl segment_pos reducer time clause payoff =
 
   let buyer_pos = MP.find_exn tl.next segment_pos in
+  let buyer = ownerOf tl buyer_pos in
   let buyer_deposit = MP.find tl.provision buyer_pos |? 0 in
 
   let seller_deposit = MP.find tl.provision segment_pos |? 0 in
@@ -54,13 +74,13 @@ let reduce tl segment_pos reducer time clause =
         | Some lst -> not (List.mem clause lst))
   in
   let test_fail () =
-    not (run_test reducer seller_deposit buyer_deposit clause.test)
+    not (run_test reducer seller_deposit buyer_deposit clause.tests)
   in
   if (bad_time() || clause_not_found() || test_fail()) then
     throw "Clause precondition evaluates to false"
   else
-    let (s,b) =
-      compute_effects reducer buyer_deposit clause.effect
+    let payoff =
+      compute_effects reducer buyer_deposit seller buyer clause.effect payoff
     in
     let payoff = [(ownerOf tl segment_pos,s) ; (ownerOf tl buyer_pos,b)] in
     (* Reduce tradeline *)
