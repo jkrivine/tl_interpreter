@@ -16,18 +16,21 @@ let provision tl pos amount  =
   let provision = MP.update tl.provision pos (fun a_opt -> (a_opt |? 0) + amount) in
   { tl with provision}
 
-(*!!! Function does not deal with repeated tests of the same amount !!!!*)
-let rec run_tests seller_deposit buyer_deposit = function
-    (BuyerHas a)::tests -> run_tests (buyer_deposit-a) seller_deposit tests
-  | (SellerHas a)::tests -> run_tests buyer_deposit (seller_deposit-a) tests
-  | (Not t')::tests -> not (run_tests buyer_deposit seller_deposit [t']) && (run_tests buyer_deposit seller_deposit tests)
-  | [] -> true
+let rec run_test reducer seller_deposit buyer_deposit test =
+  let depo =
+    match reducer with
+      Seller -> buyer_deposit
+    | Buyer -> seller_deposit
+  in
+  match test with
+    Higher a -> depo >= a
+  | Lower a -> depo < a
 
 (**Generate the (positive) payoff <+s (from contract), +b (from emptying the deposit)> *)
-let compute_effects buyer_deposit a =
-  if buyer_deposit >= a then (a,buyer_deposit-a)
-  else (buyer_deposit,0)
-
+let compute_effects reducer buyer_deposit a =
+  match reducer with
+    Buyer -> (buyer_deposit-a,a)
+  | Seller -> if buyer_deposit>=a then (buyer_deposit-a,a) else (0,buyer_deposit)
 
 (*Current implementation does not allow one to do zero crossing, test should return a payoff*)
 let reduce tl segment_pos reducer time clause =
@@ -37,7 +40,6 @@ let reduce tl segment_pos reducer time clause =
 
   let seller_deposit = MP.find tl.provision segment_pos |? 0 in
   let segment = MP.find_exn tl.segments segment_pos in
-
 
   (* Possible error conditions *)
   let bad_time () =
@@ -52,13 +54,13 @@ let reduce tl segment_pos reducer time clause =
         | Some lst -> not (List.mem clause lst))
   in
   let test_fail () =
-    not (run_tests seller_deposit buyer_deposit clause.tests)
+    not (run_test reducer seller_deposit buyer_deposit clause.test)
   in
   if (bad_time() || clause_not_found() || test_fail()) then
     throw "Clause precondition evaluates to false"
   else
     let (s,b) =
-      compute_effects buyer_deposit clause.effect
+      compute_effects reducer buyer_deposit clause.effect
     in
     let payoff = [(ownerOf tl segment_pos,s) ; (ownerOf tl buyer_pos,b)] in
     (* Reduce tradeline *)

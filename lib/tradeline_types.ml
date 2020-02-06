@@ -22,12 +22,12 @@ type amount = int (*amount of crypto, later a vector of NFTs,FTs,Crypto*)
 
 type pos = int (*Special NFT for positions*)
 type side = Seller | Buyer
-type testExpr = SellerHas of amount | BuyerHas of amount | Not of testExpr
+type testExpr = Higher of amount (*>=*)| Lower of amount (*<*)
 
 type clause = {
   t_from: time option; (*None for 0*)
   t_to: time option; (*None for +infty*)
-  tests : testExpr list ;
+  test : testExpr ;
   effect : amount ; (*Pay amount to seller*)
 }
 type segment = {
