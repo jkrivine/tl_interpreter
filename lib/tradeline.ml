@@ -16,7 +16,7 @@ let provision tl pos amount  =
   let provision = MP.update tl.provision pos (fun a_opt -> (a_opt |? 0) + amount) in
   { tl with provision}
 
-let rec run_test reducer seller_deposit buyer_deposit test_list =
+let run_test reducer seller_deposit buyer_deposit test_list =
   let depo =
     match reducer with
       Seller -> buyer_deposit
@@ -29,8 +29,7 @@ let rec run_test reducer seller_deposit buyer_deposit test_list =
   List.for_all eval test_list
 
 
-
-let compute_effects reducer seller buyer buyer_init_depo (ledger:Ledger.t) effects =
+let compute_effects reducer seller buyer buyer_init_depo ledger effects =
   let rec eval ledger effects buyer_current_depo =
     match effects with
       [] -> Ledger.add ledger buyer buyer_current_depo (*left over is given back to owner of buyer_depo*)
@@ -52,14 +51,15 @@ let compute_effects reducer seller buyer buyer_init_depo (ledger:Ledger.t) effec
   eval ledger effects buyer_init_depo
 
 (*Current implementation does not allow one to do zero crossing, test should return a payoff*)
-let reduce tl segment_pos reducer time clause payoff =
+let reduce tl ledger seller_pos reducer time clause =
 
-  let buyer_pos = MP.find_exn tl.next segment_pos in
-  let buyer = ownerOf tl buyer_pos in
+  let buyer_pos = MP.find_exn tl.next seller_pos in
+  let buyer = MP.find_exn tl.owners buyer_pos in
   let buyer_deposit = MP.find tl.provision buyer_pos |? 0 in
 
-  let seller_deposit = MP.find tl.provision segment_pos |? 0 in
-  let segment = MP.find_exn tl.segments segment_pos in
+  let seller = MP.find_exn tl.owners seller_pos in
+  let seller_deposit = MP.find tl.provision seller_pos |? 0 in
+  let segment = MP.find_exn tl.segments seller_pos in
 
   (* Possible error conditions *)
   let bad_time () =
@@ -69,7 +69,7 @@ let reduce tl segment_pos reducer time clause payoff =
   let clause_not_found () = (*Eventually will be a test that a given clause hsh indeed matches a clause*)
     match reducer with
     | Seller -> not (List.mem clause segment.bwd_contract)
-    | Buyer -> (match MP.find segment.fwd_contract segment_pos with
+    | Buyer -> (match MP.find segment.fwd_contract seller_pos with
         | None -> true (*No fwd contract is attached to seller_pos, this should be impossible ?*)
         | Some lst -> not (List.mem clause lst))
   in
@@ -79,16 +79,18 @@ let reduce tl segment_pos reducer time clause payoff =
   if (bad_time() || clause_not_found() || test_fail()) then
     throw "Clause precondition evaluates to false"
   else
-    let payoff =
-      compute_effects reducer buyer_deposit seller buyer clause.effect payoff
+    let ledger' =
+      compute_effects reducer seller buyer buyer_deposit ledger clause.effects
     in
-    let payoff = [(ownerOf tl segment_pos,s) ; (ownerOf tl buyer_pos,b)] in
     (* Reduce tradeline *)
 
     (*1. removing buyer position from tl and making seller position point to next buyer*)
     let next_buyer = MP.find tl.next buyer_pos in (*possibly None*)
-    let next = (*segment_pos ---> next_buyer *)
-      MP.remove (match next_buyer with None -> tl.next | Some pos' -> MP.set tl.next segment_pos pos') buyer_pos
+    let next = (*seller_pos ---> next_buyer *)
+      let next' = match next_buyer with
+          None -> tl.next
+        | Some pos' -> MP.set tl.next seller_pos pos' in
+      MP.remove next' buyer_pos
     in
     let provision = MP.remove tl.provision buyer_pos in
 
@@ -99,16 +101,18 @@ let reduce tl segment_pos reducer time clause payoff =
     (* backward move *)
     | Seller ->
        let segments = MP.remove tl.segments buyer_pos in
-       (transfer {tl with segments ; next ; provision} buyer_pos None,payoff) (*burning buyer_pos*)
+       let tl' = {tl with segments ; next ; provision} in
+       (transfer tl' buyer_pos None, ledger') (*burning buyer_pos*)
 
     (* forward move *)
     | Buyer ->
        let segments =
          match MP.find tl.segments buyer_pos with
-           Some segment' -> MP.set tl.segments segment_pos segment'
-         | None -> MP.remove tl.segments segment_pos
+           Some segment' -> MP.set tl.segments seller_pos segment'
+         | None -> MP.remove tl.segments seller_pos
        in
-       (transfer {tl with segments ; next ; provision} segment_pos (ownerOf tl buyer_pos),payoff) (*transfering ownership of seller_pos to buyer*)
+       let tl' = {tl with segments ; next ; provision} in
+       (transfer tl' seller_pos (ownerOf tl buyer_pos), ledger') (*transferring ownership of seller_pos to buyer*)
 
 let init addr =
   let pos = 0 in

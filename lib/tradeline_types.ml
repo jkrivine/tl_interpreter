@@ -3,18 +3,6 @@
 https://discuss.ocaml.org/t/avoiding-duplicated-definitions-in-module-implementation-and-interface/1546/4
 *)
 (*open Base*)
-module MP =
-  struct
-    module M = Base.Map.Poly
-    type ('k,'d) t = ('k,'d) M.t
-    let empty = M.empty
-    let update m k fn = M.update m k ~f:fn
-    let find_exn = M.find_exn
-    let find = M.find
-    let set m k d = M.set m ~key:k ~data:d
-    let remove = M.remove
-    let singleton = M.singleton
-  end
 
 type addr = int (*user/contract address*)
 type time = int (*block number*)
@@ -31,11 +19,14 @@ type clause = {
   tests : testExpr list ;
   effects : effectExpr list;
 }
+
+(* Warning: fwd_contract cannot use passive payments ([DrawUpTo]), only active ones ([Pay]) *)
 type segment = {
   fwd_contract : (pos, clause list) MP.t; (*pos -> c_1 or ... or c_n*)
   bwd_contract : clause list;
 }
-type tradeline = {
+
+type t = {
   source: pos; (* First position of the tradeline *)
   (* Invariant: the source cannot be evicted; any position with next=prev=null
    * is evicted, unless they are the source. In that case the tradeline is a
