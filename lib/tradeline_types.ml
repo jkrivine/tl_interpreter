@@ -40,18 +40,18 @@ type t = {
 }
 
 module Ledger =
-  struct
-    type t = {map : (addr,amount) MP.t ; z_crossings : int}
-    let empty = {map = MP.empty ; z_crossings = 0}
-    let find_exn l = MP.find_exn l.map
-    let find l = MP.find l.map
-    let add l addr a =
-      let v = match MP.find l.map addr with None -> 0 | Some v' -> v'
-      in
-      {map = MP.set l.map addr (a+v) ;
-       z_crossings = if (a+v<0 && v>=0) then l.z_crossings+1 else l.z_crossings}
-    let transfer l addr1 addr2 a = add (add l addr1 (-a)) addr2 a
-    let solvent l = l.z_crossings = 0
-  end
+struct
+  type t = {map : (addr,amount) MP.t ; z_crossings : int}
+  let empty = {map = MP.empty ; z_crossings = 0}
+  let find_exn l = MP.find_exn l.map
+  let find l = MP.find l.map
+  let add l addr a =
+    let v = match MP.find l.map addr with None -> 0 | Some v' -> v' in
+    let z_crossings = if (a+v<0 && v>=0) then l.z_crossings+1
+      else if (a+v>=0 && v<0) then l.z_crossings-1 else l.z_crossings in
+    {map = MP.set l.map addr (a+v) ; z_crossings }
+  let transfer l addr1 addr2 a = add (add l addr1 (-a)) addr2 a
+  let solvent l = l.z_crossings = 0
+end
 
 exception Throws of string
