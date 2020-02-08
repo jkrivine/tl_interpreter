@@ -1,12 +1,12 @@
 module T = Tradeline
+include Tools
+
 
 type tl_id = int
 
-type reduction_command = {
-  seller_pos: T.pos;
-  reducer: T.side;
-  clause: T.clause
-}
+type call = REDUCE of T.pos * T.side * T.clause
+          | GROW of T.pos * T.segment
+          | PAY of T.pos * T.amount
 
 type t = {
   ledger : T.Ledger.t;
@@ -14,20 +14,46 @@ type t = {
   max_tl_id : tl_id;
 }
 
-let reduce m tl_id time lst = match MP.find m.tls tl_id with
-    None -> failwith "Tradeline not found"
+let one_step tl ledger time caller = function
+       | REDUCE (seller_pos,reducer,clause) ->
+          let subject_pos = match reducer with
+              T.Seller -> seller_pos
+            | T.Buyer ->
+               match T.next tl seller_pos with
+                 None -> raise (T.Throws "Illegal buyer position")
+               | Some p -> p
+          in
+          if not (caller = (T.ownerOf tl subject_pos |? -1)) then
+            raise (T.Throws "Caller not authorized to reduce")
+          else
+            T.reduce tl ledger seller_pos reducer time clause
+       | GROW (seller_pos,segment) ->
+          begin
+            (*check here that seller_pos is head of tl*)
+            match T.next tl seller_pos with
+              Some _ -> raise (T.Throws "Cannot grow a positionn that is not head of a tradeline")
+            | None ->
+               (T.grow tl segment,ledger)
+          end
+       | PAY (pos,a) ->
+          (*update ledger here*)
+          (T.provision tl pos a,ledger)
+
+let exec m caller tl_id time calls =
+  match MP.find m.tls tl_id with
+    None -> raise (T.Throws "Tradeline not found")
   | Some tl ->
-    let rec reduce' tl ledger = function
-      | [] -> if T.Ledger.solvent ledger
-        then
-          let tls = MP.set m.tls tl_id tl in
-          {m with ledger;tls}
-        else
-          failwith "Resulting mother contract is not solvent"
-      | {seller_pos ; reducer; clause}::ls ->
-        let tl', ledger' = T.reduce tl m.ledger seller_pos reducer time clause in
-        reduce' tl' ledger' ls
-    in reduce' tl m.ledger lst
+     let tl,ledger =
+       List.fold_left
+         (fun (tl,ledger) call -> one_step tl ledger time caller call
+         ) (tl,m.ledger) calls
+     in
+     if T.Ledger.solvent ledger
+     then
+       let tls = MP.set m.tls tl_id tl in
+       {m with ledger;tls}
+     else
+       raise (T.Throws "Reduction sequence is not solvent")
 
 let new_tl m addr =
   let max_tl_id = m.max_tl_id + 1 in

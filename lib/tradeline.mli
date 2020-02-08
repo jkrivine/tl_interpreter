@@ -1,4 +1,7 @@
 include module type of Tradeline_types
+exception Throws of string
+
+val next : t -> pos -> pos option
 
 (**[transfer tl p player] transfer ownership of position [p] to [player]*)
 val transfer : t -> pos -> addr option -> t
@@ -17,6 +20,7 @@ val reduce : t -> Ledger.t -> pos -> side -> time -> clause -> (t * Ledger.t)
 val init : addr -> t
 
 val grow: t -> segment -> t
+
 
 (* Throws if given provision has no segment *)
 (* Provisioning a dead, gc-able provision is fine *)

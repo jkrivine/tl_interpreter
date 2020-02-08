@@ -1,7 +1,7 @@
 include Tradeline_types
+include Tools
 
-let (|?) a default = Option.value a ~default
-let throw msg = raise (Throws msg)
+let next tl pos = MP.find tl.next pos
 
 let transfer tl pos player_opt =
   match player_opt with
@@ -77,7 +77,7 @@ let reduce tl ledger seller_pos reducer time clause =
     not (run_test reducer seller_deposit buyer_deposit clause.tests)
   in
   if (bad_time() || clause_not_found() || test_fail()) then
-    throw "Clause precondition evaluates to false"
+    raise (Throws "Clause precondition evaluates to false")
   else
     let ledger' =
       compute_effects reducer seller buyer buyer_deposit ledger clause.effects
