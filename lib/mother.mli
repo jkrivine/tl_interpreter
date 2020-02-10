@@ -5,7 +5,7 @@ type tl_id
 type t
 type call
 
-val exec : t -> Tradeline.addr -> tl_id -> Tradeline.time -> call list -> t
+val exec : t -> Tradeline.time -> (Tradeline.addr * call) list -> t
 
 val new_tl : t -> Tradeline.addr -> t
 

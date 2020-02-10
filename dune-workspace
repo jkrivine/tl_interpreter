@@ -1,4 +1,6 @@
 (lang dune 2.1)
 (env
   (dev
-    (flags (:standard -warn-error -A))))
+    ; make warnings non-fatal and disable some warnings:
+    ; 37 is "constructor C is never used to build values"
+    (flags (:standard -w -37 -warn-error -a))))

@@ -50,7 +50,6 @@ let compute_effects reducer seller buyer buyer_init_depo ledger effects =
   in
   eval ledger effects buyer_init_depo
 
-(*Current implementation does not allow one to do zero crossing, test should return a payoff*)
 let reduce tl ledger seller_pos reducer time clause =
 
   let buyer_pos = MP.find_exn tl.next seller_pos in
