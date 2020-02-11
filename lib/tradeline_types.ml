@@ -2,16 +2,21 @@
  *
 https://discuss.ocaml.org/t/avoiding-duplicated-definitions-in-module-implementation-and-interface/1546/4
 *)
+open Tools
+
+module SP = Core.Set.Poly
+
 (*open Base*)
 
 type addr = int (*user/contract address*)
 type time = int (*block number*)
 type amount = int (*amount of crypto, later a vector of NFTs,FTs,Crypto*)
+type token = int
 
 type pos = int (*Special NFT for positions*)
 type side = Seller | Buyer
-type testExpr = Higher of amount (*>=*)| Lower of amount (*<*)
-type effectExpr = Pay of amount | DrawUpTo of amount
+type testExpr = Higher of token * amount (*>=*)| Lower of token * amount (*<*)
+type effectExpr = Pay of token * amount | DrawUpTo of token * amount
 
 type clause = {
   t_from: time option; (*None for 0*)
@@ -34,23 +39,28 @@ type t = {
   max_pos: pos; (* Source of fresh pos numbers; could be random int *)
   owners: (pos, addr) MP.t;
   next: (pos, pos) MP.t;
-  provision : (pos,amount) MP.t; (* positioned provisions*)
   segments : (pos, segment) MP.t; (*[segments.find u] returns the segment between u and u+*)
   (*!!Warning: segments is invariant under backward but is modified by forward.*)
+  dead: pos SP.t;
 }
+
+type entry = Eaddr of addr | Epos of pos
 
 module Ledger =
 struct
-  type t = {map : (addr,amount) MP.t ; z_crossings : int}
+  type t = {map : ((entry * token),amount) MP.t ; z_crossings : int}
   let empty = {map = MP.empty ; z_crossings = 0}
   let find_exn l = MP.find_exn l.map
   let find l = MP.find l.map
-  let add l addr a =
-    let v = match MP.find l.map addr with None -> 0 | Some v' -> v' in
+  let balance l entry t = MP.find l.map (entry,t) |? 0
+  let add l entry t a =
+    let v = balance l entry t in
     let z_crossings = if (a+v<0 && v>=0) then l.z_crossings+1
       else if (a+v>=0 && v<0) then l.z_crossings-1 else l.z_crossings in
-    {map = MP.set l.map addr (a+v) ; z_crossings }
-  let transfer l addr1 addr2 a = add (add l addr1 (-a)) addr2 a
+    {map = MP.set l.map (entry,t) (a+v) ; z_crossings }
+  let transfer l entry1 entry2 t a = add (add l entry1 t (-a)) entry2 t a
+  let transferUpTo l entry1 entry2 t a =
+    let a' = min (balance l entry1 t) a in transfer l entry1 entry2 t a'
   let solvent l = l.z_crossings = 0
 end
 

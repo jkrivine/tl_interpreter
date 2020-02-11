@@ -1,5 +1,5 @@
 module T = Tradeline
-include Tools
+open Tools
 
 type tl_id = int
 
@@ -54,11 +54,9 @@ let one_step m time = function
                else
                  (T.grow tl segment,ledger)
            )
-       | caller, PROVISION (tl_id,pos,a) ->
-         with_tl m tl_id (fun tl ledger ->
-             let ledger = T.Ledger.add ledger caller (-a) in
-             (T.provision tl pos a,ledger)
-           )
+       | caller, PROVISION (pos,t,a) ->
+         let ledger = T.Ledger.transfer m.ledger (Eaddr caller) (Epos pos) t a in
+         {m with ledger}
        | caller, COLLECT (pos, a) ->
           (*should provision ledger of ownerOf pos with amount a, provided pos is singleton*)
           failwith "Not implemented yet"

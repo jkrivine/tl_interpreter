@@ -4,12 +4,9 @@ exception Throws of string
 val next : t -> pos -> pos option
 
 (**[transfer tl p player] transfer ownership of position [p] to [player]*)
-val transfer : t -> pos -> addr option -> t
+val transfer : t -> pos -> addr -> t
 
 val ownerOf : t -> pos -> addr option
-
-(**[provision tl p player a] provisions [a] coins to segment after position [p] for [player], NB(ext) anyone can call*)
-val provision : t -> pos -> amount -> t
 
 (**[reduce tl p Seller t c] Backward reduction of [p] at time [t] on clause [c]. NB(ext) caller should be owner of [p]
 [reduce tl p Buyer t c] Forward reduction of [p+] at time [t] on clause [c].
