@@ -6,7 +6,8 @@ type tl_id = int
 type call = REDUCE of tl_id * T.pos * T.side * T.clause
           | GROW of tl_id * T.pos * T.segment
           | PROVISION of tl_id * T.pos * T.amount
-          | NEW of T.addr
+          | COLLECT of T.pos * T.amount
+          | NEW
 
 type t = {
   ledger : T.Ledger.t;
@@ -27,8 +28,7 @@ let with_tl m tl_id (k: T.t -> T.Ledger.t -> (T.t * T.Ledger.t)) : t =
      {m with ledger;tls}
 
 let one_step m time = function
-       | _, NEW addr ->
-         new_tl m addr
+       | caller, NEW -> new_tl m caller
        | caller, REDUCE (tl_id,seller_pos,reducer,clause) ->
           with_tl m tl_id (fun tl ledger ->
           let subject_pos = match reducer with
@@ -54,11 +54,14 @@ let one_step m time = function
                else
                  (T.grow tl segment,ledger)
            )
-       | _, PROVISION (tl_id,pos,a) ->
+       | caller, PROVISION (tl_id,pos,a) ->
          with_tl m tl_id (fun tl ledger ->
-             (*update ledger here*)
+             let ledger = T.Ledger.add ledger caller (-a) in
              (T.provision tl pos a,ledger)
            )
+       | caller, COLLECT (pos, a) ->
+          (*should provision ledger of ownerOf pos with amount a, provided pos is singleton*)
+          failwith "Not implemented yet"
 
 let exec m time calls =
      let m =
