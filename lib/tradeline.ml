@@ -42,15 +42,15 @@ let compute_effects reducer seller buyer buyer_pos ledger effects =
   in
   eval ledger effects
 
-let reduce tl ledger seller_pos reducer time clause =
+let reduce tl ledger seller_pos buyer_pos reducer time clause =
 
-  let buyer_pos = MP.find_exn tl.next seller_pos in
   let buyer = MP.find_exn tl.owners buyer_pos in
-
   let seller = MP.find_exn tl.owners seller_pos in
   let segment = MP.find_exn tl.segments seller_pos in
 
   (* Possible error conditions *)
+  let incoherent_call () =
+    MP.find tl.next seller_pos <> Some buyer_pos
   let bad_time () =
     (clause.t_from <> None && Option.get clause.t_from > time)
     || (clause.t_to <> None && Option.get clause.t_to < time)
@@ -65,7 +65,7 @@ let reduce tl ledger seller_pos reducer time clause =
   let test_fail () =
     not (run_test reducer ledger seller_pos buyer_pos clause.tests)
   in
-  if (bad_time() || clause_not_found() || test_fail()) then
+  if (incoherent_call() || bad_time() || clause_not_found() || test_fail()) then
     raise (Throws "Clause precondition evaluates to false")
   else
     let ledger' =

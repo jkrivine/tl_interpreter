@@ -12,7 +12,7 @@ val ownerOf : t -> pos -> addr option
 [reduce tl p Buyer t c] Forward reduction of [p+] at time [t] on clause [c].
 NB(ext) caller should be owner of [p+]
 *)
-val reduce : t -> Ledger.t -> pos -> side -> time -> clause -> (t * Ledger.t)
+val reduce : t -> Ledger.t -> pos -> pos -> side -> time -> clause -> (t * Ledger.t)
 
 val init : addr -> t
 

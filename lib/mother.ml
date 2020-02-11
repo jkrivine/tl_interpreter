@@ -3,7 +3,7 @@ open Tools
 
 type tl_id = int
 
-type call = REDUCE of tl_id * T.pos * T.side * T.clause
+type call = REDUCE of tl_id * T.pos * T.pos * T.side * T.clause
           | GROW of tl_id * T.pos * T.segment
           | PROVISION of tl_id * T.pos * T.amount
           | COLLECT of T.pos * T.amount
@@ -29,19 +29,13 @@ let with_tl m tl_id (k: T.t -> T.Ledger.t -> (T.t * T.Ledger.t)) : t =
 
 let one_step m time = function
        | caller, NEW -> new_tl m caller
-       | caller, REDUCE (tl_id,seller_pos,reducer,clause) ->
-          with_tl m tl_id (fun tl ledger ->
-          let subject_pos = match reducer with
-              T.Seller -> seller_pos
-            | T.Buyer ->
-               match T.next tl seller_pos with
-                 None -> raise (T.Throws "Illegal buyer position")
-               | Some p -> p
-          in
-          if not (caller = (T.ownerOf tl subject_pos |? -1)) then
-            raise (T.Throws "Caller not authorized to reduce")
-          else
-            T.reduce tl ledger seller_pos reducer time clause
+       | caller, REDUCE (tl_id,seller_pos,buyer_pos,reducer,clause) ->
+         with_tl m tl_id (fun tl ledger ->
+             let subject_pos = if reducer = T.Seller then buyer_pos else seller_pos in
+             if Some caller <> (T.ownerOf tl subject_pos) then
+               raise (T.Throws "Caller not authorized to reduce")
+             else
+               T.reduce tl ledger seller_pos buyer_pos reducer time clause
            )
        | caller, GROW (tl_id,seller_pos,segment) ->
          with_tl m tl_id (fun tl ledger ->
