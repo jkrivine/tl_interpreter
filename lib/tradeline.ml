@@ -50,7 +50,7 @@ let reduce tl ledger seller_pos buyer_pos reducer time clause =
 
   (* Possible error conditions *)
   let incoherent_call () =
-    MP.find tl.next seller_pos <> Some buyer_pos
+    MP.find tl.next seller_pos <> Some buyer_pos in
   let bad_time () =
     (clause.t_from <> None && Option.get clause.t_from > time)
     || (clause.t_to <> None && Option.get clause.t_to < time)
@@ -97,6 +97,15 @@ let reduce tl ledger seller_pos buyer_pos reducer time clause =
        let segments = MP.change segments seller_pos (fun _ -> buyer_segment) in
        (*transferring ownership of seller_pos to buyer*)
        (transfer {tl' with segments} seller_pos buyer, ledger')
+
+let collectable tl pos = tl.source = pos || SP.mem tl.dead pos
+
+let collect tl ledger pos t =
+  if collectable tl pos then
+    Ledger.transferAll ledger (Epos pos) (Eaddr (MP.find_exn tl.owners pos)) t
+  else
+    (* Or just do nothing? *)
+    raise (Throws "Position is not collectable")
 
 let init addr =
   let pos = 0 in

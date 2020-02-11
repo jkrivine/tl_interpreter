@@ -6,7 +6,7 @@ type tl_id = int
 type call = REDUCE of tl_id * T.pos * T.pos * T.side * T.clause
           | GROW of tl_id * T.pos * T.segment
           | PROVISION of tl_id * T.pos * T.amount
-          | COLLECT of T.pos * T.amount
+          | COLLECT of tl_id * T.pos * T.amount
           | NEW
 
 type t = {
@@ -51,9 +51,8 @@ let one_step m time = function
        | caller, PROVISION (pos,t,a) ->
          let ledger = T.Ledger.transfer m.ledger (Eaddr caller) (Epos pos) t a in
          {m with ledger}
-       | caller, COLLECT (pos, a) ->
-          (*should provision ledger of ownerOf pos with amount a, provided pos is singleton*)
-          failwith "Not implemented yet"
+       | _, COLLECT (tl_id, pos, t) ->
+         with_tl m tl_id (fun tl ledger -> (tl, T.collect tl ledger pos t))
 
 let exec m time calls =
      let m =
@@ -65,3 +64,5 @@ let exec m time calls =
      then m
      else
        raise (T.Throws "Reduction sequence is not solvent")
+
+

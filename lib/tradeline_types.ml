@@ -61,6 +61,8 @@ struct
   let transfer l entry1 entry2 t a = add (add l entry1 t (-a)) entry2 t a
   let transferUpTo l entry1 entry2 t a =
     let a' = min (balance l entry1 t) a in transfer l entry1 entry2 t a'
+  let transferAll l entry1 entry2 t =
+    let a' = balance l entry1 t in transfer l entry1 entry2 t a'
   let solvent l = l.z_crossings = 0
 end
 

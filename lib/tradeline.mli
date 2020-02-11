@@ -8,6 +8,8 @@ val transfer : t -> pos -> addr -> t
 
 val ownerOf : t -> pos -> addr option
 
+val collect : t -> Ledger.t -> pos -> token -> Ledger.t
+
 (**[reduce tl p Seller t c] Backward reduction of [p] at time [t] on clause [c]. NB(ext) caller should be owner of [p]
 [reduce tl p Buyer t c] Forward reduction of [p+] at time [t] on clause [c].
 NB(ext) caller should be owner of [p+]
