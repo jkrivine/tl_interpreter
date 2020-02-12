@@ -16,7 +16,7 @@ NB(ext) caller should be owner of [p+]
 *)
 val reduce : t -> Ledger.t -> pos -> pos -> side -> time -> clause -> (t * Ledger.t)
 
-val init : addr -> t
+val init : tl_id -> addr -> t
 
 val grow: t -> segment -> t
 

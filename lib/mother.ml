@@ -1,23 +1,21 @@
 module T = Tradeline
 open Tools
 
-type tl_id = int
-
-type call = REDUCE of tl_id * T.pos * T.pos * T.side * T.clause
-          | GROW of tl_id * T.pos * T.segment
-          | PROVISION of tl_id * T.pos * T.amount
-          | COLLECT of tl_id * T.pos * T.amount
+type call = REDUCE of T.tl_id * T.pos * T.pos * T.side * T.clause
+          | GROW of T.tl_id * T.pos * T.segment
+          | PROVISION of T.tl_id * T.pos * T.token * T.amount
+          | COLLECT of T.tl_id * T.pos * T.amount
           | NEW
 
 type t = {
   ledger : T.Ledger.t;
-  tls : (tl_id, T.t) MP.t;
-  max_tl_id : tl_id;
+  tls : (T.tl_id, T.t) MP.t;
+  max_tl_id : T.tl_id;
 }
 
 let new_tl m addr =
+  let tls = MP.set m.tls m.max_tl_id (T.init m.max_tl_id addr) in
   let max_tl_id = m.max_tl_id + 1 in
-  let tls = MP.set m.tls max_tl_id (T.init addr) in
   {m with max_tl_id;tls}
 
 let with_tl m tl_id (k: T.t -> T.Ledger.t -> (T.t * T.Ledger.t)) : t =
@@ -48,8 +46,8 @@ let one_step m time = function
                else
                  (T.grow tl segment,ledger)
            )
-       | caller, PROVISION (pos,t,a) ->
-         let ledger = T.Ledger.transfer m.ledger (Eaddr caller) (Epos pos) t a in
+       | caller, PROVISION (tl_id, pos,t,a) ->
+         let ledger = T.Ledger.transfer m.ledger (Eaddr caller) (Epos (tl_id, pos)) t a in
          {m with ledger}
        | _, COLLECT (tl_id, pos, t) ->
          with_tl m tl_id (fun tl ledger -> (tl, T.collect tl ledger pos t))

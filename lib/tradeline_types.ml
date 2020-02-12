@@ -12,6 +12,7 @@ type addr = int (*user/contract address*)
 type time = int (*block number*)
 type amount = int (*amount of crypto, later a vector of NFTs,FTs,Crypto*)
 type token = int
+type tl_id = int
 
 type pos = int (*Special NFT for positions*)
 type side = Seller | Buyer
@@ -32,6 +33,7 @@ type segment = {
 }
 
 type t = {
+  id: tl_id;
   source: pos; (* First position of the tradeline *)
   (* Invariant: the source cannot be evicted; any position with next=prev=null
    * is evicted, unless they are the source. In that case the tradeline is a
@@ -44,7 +46,7 @@ type t = {
   dead: pos SP.t;
 }
 
-type entry = Eaddr of addr | Epos of pos
+type entry = Eaddr of addr | Epos of tl_id*pos
 
 module Ledger =
 struct

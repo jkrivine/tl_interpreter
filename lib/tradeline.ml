@@ -8,11 +8,11 @@ let transfer tl pos addr = {tl with owners = MP.set tl.owners pos addr}
 let ownerOf tl pos =
   MP.find tl.owners pos
 
-let run_test reducer ledger seller_pos buyer_pos test_list =
+let run_test tl reducer ledger seller_pos buyer_pos test_list =
   let depo =
     match reducer with
-      Seller -> Ledger.balance ledger (Epos buyer_pos)
-    | Buyer -> Ledger.balance ledger (Epos seller_pos)
+      Seller -> Ledger.balance ledger (Epos (tl.id, buyer_pos))
+    | Buyer -> Ledger.balance ledger (Epos (tl.id, seller_pos))
   in
   let eval = function
       Higher (t,a) -> depo t >= a
@@ -21,23 +21,23 @@ let run_test reducer ledger seller_pos buyer_pos test_list =
   List.for_all eval test_list
 
 
-let compute_effects reducer seller buyer buyer_pos ledger effects =
+let compute_effects tl reducer seller buyer buyer_pos ledger effects =
   let rec eval ledger effects =
     match effects with
     (* with multiple tokens, we do not give back the remainder to buyer anylonger *)
       [] -> ledger
-    | (Pay (t,a))::tl -> (*Active payment*)
+    | (Pay (t,a))::ls -> (*Active payment*)
        begin
          match reducer with
-           Buyer -> eval (Ledger.transfer ledger (Eaddr buyer) (Eaddr seller) t a) tl
-         | Seller -> eval (Ledger.transfer ledger (Eaddr seller) (Eaddr buyer) t a) tl
+           Buyer -> eval (Ledger.transfer ledger (Eaddr buyer) (Eaddr seller) t a) ls
+         | Seller -> eval (Ledger.transfer ledger (Eaddr seller) (Eaddr buyer) t a) ls
        end
-    | (DrawUpTo (t,a))::tl ->
+    | (DrawUpTo (t,a))::ls ->
        begin
          match reducer with
            Buyer -> failwith "Illegal passive payment in a forward clause"
          | Seller -> (*passive payment to seller taps into depo*)
-            eval (Ledger.transferUpTo ledger (Epos buyer_pos) (Eaddr seller) t a) tl
+            eval (Ledger.transferUpTo ledger (Epos (tl.id, buyer_pos)) (Eaddr seller) t a) ls
        end
   in
   eval ledger effects
@@ -63,13 +63,13 @@ let reduce tl ledger seller_pos buyer_pos reducer time clause =
         | Some lst -> not (List.mem clause lst))
   in
   let test_fail () =
-    not (run_test reducer ledger seller_pos buyer_pos clause.tests)
+    not (run_test tl reducer ledger seller_pos buyer_pos clause.tests)
   in
   if (incoherent_call() || bad_time() || clause_not_found() || test_fail()) then
     raise (Throws "Clause precondition evaluates to false")
   else
     let ledger' =
-      compute_effects reducer seller buyer buyer_pos ledger clause.effects
+      compute_effects tl reducer seller buyer buyer_pos ledger clause.effects
     in
     (* Reduce tradeline *)
 
@@ -102,14 +102,15 @@ let collectable tl pos = tl.source = pos || SP.mem tl.dead pos
 
 let collect tl ledger pos t =
   if collectable tl pos then
-    Ledger.transferAll ledger (Epos pos) (Eaddr (MP.find_exn tl.owners pos)) t
+    Ledger.transferAll ledger (Epos (tl.id, pos)) (Eaddr (MP.find_exn tl.owners pos)) t
   else
     (* Or just do nothing? *)
     raise (Throws "Position is not collectable")
 
-let init addr =
+let init id addr =
   let pos = 0 in
   {
+    id = id;
     source = pos;
     max_pos = pos;
     owners = MP.singleton pos addr;

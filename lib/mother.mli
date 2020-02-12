@@ -1,7 +1,5 @@
 (*include module type of Tradeline_types*)
 
-type tl_id
-
 type t
 type call
 
