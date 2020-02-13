@@ -98,7 +98,11 @@ let reduce tl ledger seller_pos buyer_pos reducer time clause =
        (*transferring ownership of seller_pos to buyer*)
        (transfer {tl' with segments} seller_pos buyer, ledger')
 
-let collectable tl pos = tl.source = pos || SP.mem tl.dead pos
+(**Collect dead position. If ones wants to collect a singelton tl, one should kill it first*)
+let collectable tl pos = SP.mem tl.dead pos
+let kill tl pos =
+  if tl.source = pos && MP.find tl.next pos = None then SP.add tl.dead pos
+  else raise (Throws "Position cannot be burnt")
 
 let collect tl ledger pos t =
   if collectable tl pos then
@@ -127,14 +131,20 @@ let get_sink tl =
 
 
 let grow tl segment =
-  let pos = tl.max_pos + 1 in
+  let fresh_pos = tl.max_pos + 1 in
   let sink = get_sink tl in
   {tl with
-   max_pos = pos;
-   owners = MP.set tl.owners pos (MP.find_exn tl.owners sink);
-   next = MP.set tl.next pos sink;
-   segments = MP.set tl.segments pos segment;
+   max_pos = fresh_pos ;
+   owners = MP.set tl.owners fresh_pos (MP.find_exn tl.owners sink) ;
+   next = MP.set tl.next fresh_pos sink ;
+   segments = MP.set tl.segments fresh_pos segment ;
   }
 
 let make_clause t_from t_to tests effects = { t_from; t_to; tests; effects }
+
+(*1/ remove TL map and push various pos maps/sets
+(including source set, dead set) into mother contract*)
+(*2/ !!! check one cannot grow a dead position !!!*)
+(*3/ add detailed comments on tradeoffs*)
+(*4/ How to handle segment language and the problem of relative time *)
 

@@ -19,5 +19,6 @@ val new_tl : t -> T.addr -> t
 
 type fwd_contract := (T.pos, T.clause list) MP.t
 
-val call_grow_A : T.tl_id -> T.pos -> fwd_contract -> T.time -> T.token -> T.amount -> T.time -> call
+val call_grow_A :
+  T.tl_id -> T.pos -> fwd_contract -> T.time -> T.token -> T.amount -> T.time -> call
 

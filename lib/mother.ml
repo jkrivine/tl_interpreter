@@ -45,7 +45,7 @@ let rec one_step m time = function
        | caller, NEW -> new_tl m caller
        | caller, REDUCE (tl_id,seller_pos,buyer_pos,reducer,clause) ->
          with_tl m tl_id (fun tl ledger ->
-             let subject_pos = if reducer = T.Seller then buyer_pos else seller_pos in
+             let subject_pos = if reducer = T.Seller then seller_pos else buyer_pos in
              if Some caller <> (T.ownerOf tl subject_pos) then
                raise (T.Throws "Caller not authorized to reduce")
              else
@@ -62,11 +62,11 @@ let rec one_step m time = function
                else
                  (T.grow tl segment,ledger)
            )
-       | caller, PROVISION (tl_id, pos,t,a) ->
-         let ledger = T.Ledger.transfer m.ledger (Eaddr caller) (Epos (tl_id, pos)) t a in
+       | caller, PROVISION (tl_id, pos,tk,a) ->
+         let ledger = T.Ledger.transfer m.ledger (Eaddr caller) (Epos (tl_id, pos)) tk a in
          {m with ledger}
-       | _, COLLECT (tl_id, pos, t) ->
-         with_tl m tl_id (fun tl ledger -> (tl, T.collect tl ledger pos t))
+       | _, COLLECT (tl_id, pos, tk) ->
+         with_tl m tl_id (fun tl ledger -> (tl, T.collect tl ledger pos tk))
        | caller, MAKE_CALL f -> one_step m time (caller, (f caller time))
 
 

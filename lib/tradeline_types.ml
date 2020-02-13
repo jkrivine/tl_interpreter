@@ -54,17 +54,17 @@ struct
   let empty = {map = MP.empty ; z_crossings = 0}
   let find_exn l = MP.find_exn l.map
   let find l = MP.find l.map
-  let balance l entry t = MP.find l.map (entry,t) |? 0
-  let add l entry t a =
-    let v = balance l entry t in
+  let balance l entry tk = MP.find l.map (entry,tk) |? 0
+  let add l entry tk a =
+    let v = balance l entry tk in
     let z_crossings = if (a+v<0 && v>=0) then l.z_crossings+1
       else if (a+v>=0 && v<0) then l.z_crossings-1 else l.z_crossings in
-    {map = MP.set l.map (entry,t) (a+v) ; z_crossings }
-  let transfer l entry1 entry2 t a = add (add l entry1 t (-a)) entry2 t a
-  let transferUpTo l entry1 entry2 t a =
-    let a' = min (balance l entry1 t) a in transfer l entry1 entry2 t a'
-  let transferAll l entry1 entry2 t =
-    let a' = balance l entry1 t in transfer l entry1 entry2 t a'
+    {map = MP.set l.map (entry,tk) (a+v) ; z_crossings }
+  let transfer l entry1 entry2 tk a = add (add l entry1 tk (-a)) entry2 tk a
+  let transferUpTo l entry1 entry2 tk a =
+    let a' = min (balance l entry1 tk) a in transfer l entry1 entry2 tk a'
+  let transferAll l entry1 entry2 tk =
+    let a' = balance l entry1 tk in transfer l entry1 entry2 tk a'
   let solvent l = l.z_crossings = 0
 end
 
