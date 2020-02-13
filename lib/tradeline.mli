@@ -20,6 +20,8 @@ val init : tl_id -> addr -> t
 
 val grow: t -> segment -> t
 
+val make_clause : time option -> time option -> testExpr list -> effectExpr list -> clause
+
 
 (* Throws if given provision has no segment *)
 (* Provisioning a dead, gc-able provision is fine *)

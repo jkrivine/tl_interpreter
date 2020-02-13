@@ -136,3 +136,5 @@ let grow tl segment =
    segments = MP.set tl.segments pos segment;
   }
 
+let make_clause t_from t_to tests effects = { t_from; t_to; tests; effects }
+
