@@ -1,43 +1,44 @@
-# On orphaned ledgers:
-  After 
+# 14/2/2020
+## Should sources always be collectable?
+A position contains deposits. Those deposits can be emptied through a reduction
+or through a 'collection', which is a form of garbage collection. As of now,
+'collectable' is defined as 'source with no next, or dead'. Is it a problem for
+a source to be collectable at any time? If `A` has a position `v` to sell (with
+`v` attached to a source `u` in buyer position), then buyer `B` is not
+particularly at risk: either `A` cannot pull on `v`, and `B` is safe, or `A`
+can pull, and `B` is unsafe whether source have to be 'killed' or not before
+they become 'collectable'.
 
-  ```
-    u --K-- v --K'-- w
-           Fv
-        u --K'-- w
-  ```
 
-  The K segment (containing a provisioned ledger) is orphaned. In a
-  real-world implementation, ledgers would be flat, that is: not
-  contained in a segment but with its own id. Here for simplicity (?) I
-  use the fact that the token v was also detached from the tradeline and
-  I associate K to v. That way K can be gc'ed and there is a trace of
-  that gc operation in the tradeline.
-
-JK: isn't that problem a consequence of the fact you don't want GC to operate in an opportunistic manner but only on demand? Because otherwise you could just GC the whole segement after the Fv reduction
-
-Also, there is no need to return a payoff after `reduce` (i.e. `reduce : ... (tradeline*payoff)` is not necessary and `reduce : ... -> tradeline` is sufficient) since even without an environment, the transferred provisions can stay in the segment's ledger.
-
-JK: similar to the above point. If you GC on the fly you can compute the payoff immediately.
+## Can relative times be salvaged by triggered timers?
+We are interested in a backward condition that can express 'from time of sale
+of token v + d, to...'. We suppose that the seller (`A`) has an incentive to
+start the timer as early as possible, the buyer as late as possible.  Assuming
+the dex address D is known advance, the timer could say: 'I can be triggered
+when `ownerOf(v)` is any address != `D`'. At the time when `B` sees `v`, `v` is
+owned by `D`. If `B` trusts `D`, it knows `D` will not attack by transferring
+`v` to some address `D'`. So `B` can safely buy the token, and `A` is then free
+to trigger the timer.
 
 # Possible states for positions
 For a position pos, here are the possible states of pos depending on
-whether `tl.next pos`, `tl.prev pos`, and `tl.segments pos` are defined or not.
+whether `tl.next pos`, `tl.dead pos`, and `tl.segments pos` are defined or not.
+Whether a position `pos` is a tl source is tested by `tl.source = pos`.
 
-  Next   Prev  Segment     Status
+  Next   Dead  Segment     Status
 
-   ✔      ✗      ✔         source
+   ✔      ✗      ✔         alive with a next
 
-   ✔      ✔      ✔         middle
+   ✗      ✔      ✗         dead
 
-   ✗      ✔      ✗         sink
+   ✗      ✗      ✗         alive without a next
 
-   ✗      ✗      ✗         fresh if pos > tl.max_pos, unreachable if pos <= tl.max_pos
+   ✔      ✔      ✔         (unreachable)
 
-   ✗      ✗      ✔         gc-able / gc-ed
+   ✗      ✗      ✔         (unreachable)
 
-   ✗      ✔      ✔         unreachable
+   ✗      ✔      ✔         (unreachable)
 
-   ✔      ✔      ✗         unreachable
+   ✔      ✔      ✗         (unreachable)
 
-   ✔      ✗      ✗         unreachable
+   ✔      ✗      ✗         (unreachable)
