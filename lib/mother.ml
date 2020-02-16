@@ -137,8 +137,9 @@ let collectable m pos = (SP.mem m.sources pos && MP.find m.next pos = None) || S
 
 let collect m pos t =
   if collectable m pos then
-    let ledger = Ledger.transferAll m.ledger (Epos pos) (Eaddr (MP.find_exn m.owners pos)) t
-    in { m with ledger }
+    let ledger = Ledger.transferAll m.ledger (Epos pos) (Eaddr (MP.find_exn m.owners pos)) t in
+    let dead = SP.add m.dead pos  in
+    { m with ledger ; dead }
   else
     (* Or just do nothing? *)
     raise (Throws "Position is not collectable")
