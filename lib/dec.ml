@@ -1,15 +1,19 @@
 include Dec_types
 open Tools
 
+module MP = MP
+
+
 type call = REDUCE of pos * pos * side * clause
           | GROW of pos * segment
           | PROVISION of pos * token * amount
           | COLLECT of pos * token
           | NEW
           | MAKE_CALL of (addr -> time -> call)
+[@@deriving show]
 
 type t = {
-  (* Store of funds owned by addresses and positions *)
+  (** Store of funds owned by addresses and positions *)
   ledger : Ledger.t;
   (* Registry of position ownership *)
   owners: (pos, addr) MP.t;
@@ -27,6 +31,20 @@ type t = {
   (* Source of fresh pos numbers; could be random int *)
   max_pos: pos;
 }
+[@@deriving show]
+
+let empty =
+  {
+    ledger= Ledger.empty;
+    owners= MP.empty;
+    sources= SP.empty;
+    next= MP.empty;
+    segments= MP.empty;
+    dead= SP.empty;
+    oracles = (fun _-> failwith "woops");
+    max_pos= 0;
+  }
+
 
 (** *)
 
@@ -36,7 +54,7 @@ let init_tl m addr =
   let m',source = new_pos m in
   let sources = SP.add m.sources source in
   let owners = MP.set m.owners source addr in
-  { m' with sources ; owners }
+  ({ m' with sources ; owners }, source)
 
 let next m pos = MP.find m.next pos
 
@@ -161,6 +179,7 @@ let grow m sink segment =
 
 let make_clause t_from t_to tests effects = { t_from; t_to; tests; effects }
 
+
 (* call_grow_A time d0 t a d1 d2 means:
  * from [time] to [time+d0], no backward
  * from [time+d0+1] to [time+d1], backward allowed if buyer pos has strictly less than [a] of token [t]
@@ -177,7 +196,7 @@ let call_grow_A pos fwd_contract d0 t a d1 =
 
 let rec one_step m time = function
   | caller, NEW ->
-    init_tl m caller
+    let m',_ = init_tl m caller in m'
   | caller, REDUCE (seller_pos,buyer_pos,reducer,clause) ->
     let subject_pos = if reducer = Seller then seller_pos else buyer_pos in
     if Some caller <> (ownerOf m subject_pos) then

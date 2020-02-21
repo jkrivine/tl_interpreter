@@ -3,8 +3,30 @@
 (** For convenience, [Dec_types] contains most of the Dec's non-functional type definitions *)
 include module type of Dec_types
 
+(* reexport MP *)
+module MP : module type of MP
+
 (** Contains the current state *)
-type t
+type t = {
+  (* Store of funds owned by addresses and positions *)
+  ledger : Ledger.t;
+  (* Registry of position ownership *)
+  owners: (pos, addr) MP.t;
+  (* Source set. 'source' must be testable for collection pruposes. *)
+  sources : pos SP.t;
+  (* Tradeline structure: u -> u+ position map *)
+  next: (pos,pos) MP.t;
+  (* [segments.find u] returns the segment between u and u+*)
+  (* !!Warning: segments is invariant under backward but is modified by forward.*)
+  segments : (pos, segment) MP.t;
+  (* Dead set. Non-sources are collectable when they are dead, and dead positions cannot be grown *)
+  dead: pos SP.t;
+  (* todo: oracles *)
+  oracles: addr -> Oracle.t;
+  (* Source of fresh pos numbers; could be random int *)
+  max_pos: pos;
+}
+[@@deriving show]
 
 (** Calls are state-modifying instructions given by some caller. Most of them run authorization checks before executing.
 
@@ -30,8 +52,10 @@ type call =
 (** [exec m t l] takes the current state [m] as a first argument and a list of [(caller,call)] pairs. It returns the state after execution of those [call]s. Throws if a call could not be executed, or if the resulting state would contain an insolvent Dec. *)
 val exec : t -> time -> (addr * call) list -> t
 
+val empty : t
+
 (** [init_tl m a] is a public-facing execution of [NEW] *)
-val init_tl : t -> addr -> t
+val init_tl : t -> addr -> t * pos
 
 type fwd_contract := (pos, clause list) MP.t
 
@@ -39,3 +63,8 @@ type fwd_contract := (pos, clause list) MP.t
 val call_grow_A :
   pos -> fwd_contract -> time -> token -> amount -> time -> call
 
+(**[transfer_pos m t p a] gives owner of [pos] to [a] *)
+val transfer_pos : t -> pos -> addr -> t
+
+ (** [make_clause] is a utility function to make clauses (choice atom of backward and forward contracts) *)
+ val make_clause : pos option -> pos option -> testExpr list -> effectExpr list -> clause
