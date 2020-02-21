@@ -1,3 +1,5 @@
+(** Glue above [Base.Map.Poly] that removes argument names. *)
+
 module M = Base.Map.Poly
 type ('k,'d) t = ('k,'d) M.t
 let empty = M.empty

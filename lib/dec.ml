@@ -1,11 +1,12 @@
-include Tools
+include Dec_types
+open Tools
 
 type call = REDUCE of pos * pos * side * clause
           | GROW of pos * segment
           | PROVISION of pos * token * amount
-          | COLLECT of pos * amount
+          | COLLECT of pos * token
           | NEW
-          | MAKE_CALL of (Tools.addr -> Tools.time -> call)
+          | MAKE_CALL of (addr -> time -> call)
 
 type t = {
   (* Store of funds owned by addresses and positions *)
@@ -22,7 +23,7 @@ type t = {
   (* Dead set. Non-sources are collectable when they are dead, and dead positions cannot be grown *)
   dead: pos SP.t;
   (* todo: oracles *)
-  oracles: Tools.addr -> Oracle.t;
+  oracles: addr -> Oracle.t;
   (* Source of fresh pos numbers; could be random int *)
   max_pos: pos;
 }

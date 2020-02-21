@@ -1,3 +1,4 @@
 (library
  (libraries core)
- (name dec_lib))
+ (name dec_lib)
+ (public_name dec_lib))
