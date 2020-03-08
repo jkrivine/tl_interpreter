@@ -32,15 +32,35 @@ type testExpr =
   | ProvisionHte of token * amount
   (*| OracleLt of addr * amount*)
   | ProvisionLt of token * amount (*lower than*)
+  | HasPaidLt of token * amount (* Check notarized payments *)
+  | SellerIs of pos (* Look at current position on seller side *)
+  (*| ReadOracle of oracle (* Read a value *)*)
+  (*| IsLocked of lock (* Read a lock *)*)
 [@@deriving show]
 
 (** A clause effects can either be payment (from the caller to its counterpart in the local tradeline segment) or a provision transfer (from the caller's counterpart's position to the caller). *)
-type effectExpr = Pay of token * amount | DrawUpTo of token * amount
+and effectExpr =
+  | Pay of token * amount
+  | DrawUpTo of token * amount
+  | Reduce
+  | Proxy of call
+  (*| SetLock of lock * bool (* Set a lock *)*)
 [@@deriving show]
 
-(** A clause is possible choice for how to resolve a contract. It specifies when it is applicable, a list of tests and a list of effects *)
-type clause = {
-  t_from: time option; (** None for 0*)
+and call =
+  | TRIGGER of pos * pos * side * clause
+  | GROW of pos * segment
+  | PROVISION of pos * token * amount
+  | COLLECT_TOKEN of pos * token
+  | COLLECT_POS of pos * pos
+  | NEW
+  | MAKE_CALL of (entry -> time -> call)
+  (*| INIT_LOCK of pos * lock * bool*)
+[@@deriving show]
+
+(** A clause is a possible choice for how to resolve a contract. It specifies when it is applicable, a list of tests and a list of effects *)
+and clause = {
+  t_from: time;
   t_to: time option; (** None for +infty*)
   tests : testExpr list ;
   effects : effectExpr list;
@@ -50,23 +70,21 @@ type clause = {
 (** A segment connects two positions: the seller side and the buyer side. The forward contract specifies how the buyer side can acquire the seller side; it should map from all positions in the buyer's past to a list of clauses (TODO). The backward contract spceifies how the seller side can kick out the seller.
 
   Warning: fwd_contract cannot use passive payments ([DrawUpTo]), only active ones ([Pay]) *)
-type segment = {
-  fwd_contract : (pos, clause list) MP.t;
-
+and segment = {
+  fwd_contract : clause list;
   (*pos -> c_1 or ... or c_n*)
   bwd_contract : clause list;
 }
 [@@deriving show]
 
 (** Ledger entries can represent either users or positions *)
-type entry = Eaddr of addr | Epos of pos
+and entry = Eaddr of addr | Epos of pos
 [@@deriving show]
 
 module Ledger =
 struct
   type t = {map : ((entry * token),amount) MP.t ; z_crossings : int}
   [@@deriving show]
-  let empty = {map = MP.empty ; z_crossings = 0}
   let find_exn l = MP.find_exn l.map
   let find l = MP.find l.map
   let balance l entry tk = MP.find l.map (entry,tk) |? 0
@@ -82,6 +100,17 @@ struct
     let a' = balance l entry1 tk in transfer l entry1 entry2 tk a'
   let solvent l = l.z_crossings = 0
   let empty = {map = MP.empty; z_crossings = 0}
+end
+
+module Notary =
+struct
+  type t = ((pos * side * token),amount) MP.t
+  [@@deriving show]
+  let empty = MP.empty
+  let read n pos side tk = MP.find n (pos,side,tk) |? 0
+  let add n pos side tk a =
+    let v = read n pos side tk in
+    MP.set n (pos,side,tk) (a+v)
 end
 
 exception Throws of string

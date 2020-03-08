@@ -4,7 +4,7 @@ module M = Base.Map.Poly
 type ('k,'d) t = ('k,'d) M.t
 let pp fmt_k fmt_v fmt m =
   Format.fprintf fmt "{MP| ";
-  M.iteri m (fun ~key ~data -> Format.fprintf fmt "%a: %a, " fmt_k key fmt_v data);
+  M.iteri m ~f:(fun ~key ~data -> Format.fprintf fmt "%a: %a, " fmt_k key fmt_v data);
   Format.fprintf fmt "}"
 let empty = M.empty
 let of_alist_exn l =  M.of_alist_exn l
