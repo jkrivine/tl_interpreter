@@ -1,75 +1,67 @@
-(** The Dec (DEcentralized Clearing) manages the global state of all tradelines and associated provisions *)
+open Env
+(** Syntactic sugar *)
+module MP = MP
+module SP = SP
 
-(** For convenience, [Dec_types] contains most of the Dec's non-functional type definitions *)
-include module type of Dec_types
-
-(* reexport MP *)
-module MP : module type of MP
-
-(** Contains the current state *)
-type t = {
-  (* Store of funds owned by addresses and positions *)
-  ledger : Ledger.t;
-  (* Registry of position ownership *)
-  owners: (pos, entry) MP.t;
-  (* Source set. 'source' must be testable for collection pruposes. *)
-  sources : pos SP.t;
-  (* Tradeline structure: u -> u+ position map *)
-  next: (pos,pos) MP.t;
-  (* [segments.find u] returns the segment between u and u+*)
-  (* !!Warning: segments is invariant under backward but is modified by forward.*)
-  segments : (pos, segment) MP.t;
-  (* Record past active payments *)
-  notary: Notary.t;
-  (* Dead set. Non-sources are collectable when they are dead, and dead positions cannot be grown *)
-  dead: pos SP.t;
-  (* todo: oracles *)
-  (*oracles: addr -> Oracle.t;*)
-  (* Source of fresh pos numbers; could be random int *)
-  max_pos: pos;
-}
+type token = Address.t
 [@@deriving show]
 
-(** Calls are state-modifying instructions given by some caller. Most of them run authorization checks before executing.
+type amount = int
 
-    [TRIGGER p q side clause] Triggers [clause] in segment between [p] and [q]. [side] specifies whether the call comes from [Buyer] or [Seller].
+type pos
+val pp_pos : Format.formatter -> pos -> unit
 
-  [GROW p s] extends a tradeline ending with [p], with forward/backward contracts specified by [s]
+(** Generic representation for choosing which side of a tradeline segment we're talking about. *)
+type side = Seller | Buyer
+[@@deriving show]
 
-  [PROVISION p t a] gives [a] of the caller's token [t] to position [p]
+(** Ledger entries can represent either users or positions *)
+and entry = Eaddr of Address.t | Epos of pos
+(*val pp_entry : Format.formatter -> entry -> unit*)
 
-  [COLLECT_TOKEN p t] gives all tokens [t] owned by postion [p] to [p]'s owner
+module Ledger : sig
+  type t
 
-    [COLLECT p p'] gives position [p'] owned by position [p] to [p]'s owner.
+  val balance : t data_hkey -> entry -> token -> amount st
+  val transfer : t data_hkey -> entry -> entry -> token -> amount -> unit st
+  val transfer_up_to : t data_hkey -> entry -> entry -> token -> amount -> unit st
+  val transfer_all : t data_hkey -> entry -> entry -> token -> unit st
+  val solvent : t data_hkey -> bool st
+  val pp : Format.formatter -> t -> unit
+  val empty : t
+end
 
-  [NEW] initializes a new tradeline
+val ledger    : Ledger.t data_hkey
+val owners    : (pos,entry) MP.t data_hkey
+val sources   : pos SP.t data_hkey
+val nexts     : (pos,pos) MP.t data_hkey
+val segments  : (pos,Address.t) MP.t data_hkey
+val deads     : pos SP.t data_hkey 
+val max_pos   : int data_hkey
 
-  [MAKE_CALL f] executes the call given by [f a t] where [a] is the caller and [t] is the current time. *)
-type call = 
-  | TRIGGER of pos * pos * side * clause 
-  | GROW of pos * segment 
-  | PROVISION of pos * token * amount 
-  | COLLECT_TOKEN of pos * token 
-  | COLLECT_POS of pos * pos 
-  | NEW
-  | MAKE_CALL of (entry -> time -> call) 
+val print_dec : unit st
 
-(** [exec m t l] takes the current state [m] as a first argument and a list of [(caller,call)] pairs. It returns the state after execution of those [call]s. Throws if a call could not be executed, or if the resulting state would contain an insolvent Dec. *)
-val exec : t -> time -> (entry * call) list -> t
+type parties = pos*pos
 
-val empty : t
+(* Change tl topology *)
+val init_tl : (string*string*Address.t,pos*pos) code_hkey
+val grow : (parties * string * entry * Address.t, pos) code_hkey
+val pull : (parties,unit) code_hkey
+val commit  : (parties,unit) code_hkey
+(* Transfers *)
+val pay : (parties * side * entry * token * amount,unit) code_hkey
+val draw_up_to : (parties * token * amount, unit) code_hkey
+val collect_token : (pos * token,unit) code_hkey
+val collect_pos : (pos * pos,unit) code_hkey
+(* Reading *)
+val owner_of : (pos,entry) code_hkey
+val get_provision : (parties * token,amount) code_hkey
+val provision_hte : (parties * entry * token * amount,bool) code_hkey
+val provision_lt : (parties * entry * token * amount,bool) code_hkey
 
-(** [init_tl m a] is a public-facing execution of [NEW] *)
-val init_tl : t -> entry -> t * pos
+val transfer_token_to_provision : (token*amount*pos,unit) code_hkey
+val transfer_pos_to_provision : (pos*pos,unit) code_hkey
+val transfer_token : (token*amount*Address.t,unit) code_hkey
+val transfer_pos : (pos*Address.t,unit) code_hkey
 
-type fwd_contract := clause list
-
-(** [call_grow_A] is an example of a call-building function. It builds a restricted form of backward contracts given by some duration parameters. Since those durations depend on the when the call is executed, [call_grow_A] returns a [MAKE_CALL f] where the application of [f] returns a [GROW] call. *)
-val call_grow_A :
-  pos -> fwd_contract -> time -> token -> amount -> time -> call
-
-(**[transfer_pos m t p a] gives owner of [pos] to [a] *)
-val transfer_pos : t -> pos -> entry -> t
-
- (** [make_clause] is a utility function to make clauses (choice atom of backward and forward contracts) *)
- val make_clause : t_from:time -> t_to:time option -> tests:testExpr list -> effects:effectExpr list -> clause
+val construct : unit st

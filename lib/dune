@@ -1,5 +1,7 @@
+(include_subdirs unqualified)
 (library
- (libraries core)
- (name dec_lib)
- (public_name dec_lib)
+ (libraries hmap core)
+ (name lib)
+ (public_name lib)
+ (wrapped false)
  (preprocess (pps ppx_deriving.show)))
