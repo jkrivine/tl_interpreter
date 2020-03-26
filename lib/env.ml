@@ -80,14 +80,14 @@ let empty_env =
 
 (* In-chain commands take an environment as input (ie. a (state,context) pair)
    and return a (value result,state) pair as output *)
-type 'a st = env -> ( ('a,string) result * state )
+type 'a st = env -> ( ('a,(string*context)) result * state )
 
 let _is_admin context = context.this = Address.admin
 
 let bind t1 t2 =
   fun (s,c) -> match t1 (s,c) with
     | (Ok v,s') -> t2 v (s',c)
-    | (Error v,s') -> (Error v,s')
+    | (Error (v,c),s') -> (Error (v,c),s')
 let (>>=) = bind
 let ( let* ) t1 t2 = bind t1 t2
 let (>>) t1 t2 = bind t1 (fun _ -> t2)
@@ -106,7 +106,7 @@ let (>>) t1 t2 = bind t1 (fun _ -> t2)
       (*end else (Error v,s')*)
 
 let return v = fun (s,_) -> (Ok v,s)
-let error v = fun (s,_) -> (Error v,s)
+let error v = fun (s,c) -> (Error (v,c),s)
 let (|?*) a default = a >>= function Some e -> return e | None -> return default
 
 (* Admin-only stuff *)
@@ -173,13 +173,13 @@ let code_set code_hkey code (state,context) =
     | Some _ -> error "Code already set at this hkey"
     | None -> set_in_hmap code_hkey code ) (state,context)
   else
-    (Error "Cannot set code outside of constructor", state)
+    (Error ("Cannot set code outside of constructor",context), state)
 
 let code_private f (state,context) =
   if context.constructor then
     (let k = code () in code_set k f >> return k) (state,context)
   else
-    (Error "Cannot declare private code outside of constructor", state)
+    (Error ("Cannot declare private code outside of constructor",context), state)
 
 (* Data *)
 (* Code and data keys are treated differently because,
@@ -299,10 +299,10 @@ let create_user name (state,context) =
 
 (* Get the code given by `code_hkey` at `address`, run it in *context'` instead
    of the current context *)
-let _call context' address code_hkey args (state,_) =
+let _call context' address code_hkey args (state,context) =
   match _get_in_hmap_option code_hkey address state.hmaps with
   | Some code -> code args (state,context')
-  | None -> (Error "Code not found",state)
+  | None -> (Error ("Code not found",context),state)
 
 (* Get the code given by `code_hkey` at `address`, run it at `address` *)
 let call address code_hkey args (state,context) =
@@ -323,17 +323,21 @@ let callthis chk args (state,context) =
 let import f (state,context) =
   if context.constructor = true
   then f (state,context)
-  else (Error "cannot inherit outside of constructor",state)
+  else (Error ("cannot inherit outside of constructor",context),state)
 
 (* User sends a transactions *)
 let tx user address code_hkey args =
   is_admin >> fun (old_state,context) ->
   let final_state = match (call address code_hkey args) (old_state,{context with this=user}) with
   | (Ok _,new_state) -> new_state
-  | (Error v,_) ->
-      F.p Format.std_formatter "Error: %s" v;
+  | (Error (v,c),_) ->
+    let sf = Format.std_formatter in
+      F.p sf "Error: %s" v;
       F.cr ();
-      F.p Format.std_formatter "Reverting state...";
+      F.p sf "%s" "In ";
+      pp_context sf c;
+      F.cr ();
+      F.p sf "Reverting state...";
       F.cr ();
       old_state in
   (Ok (),final_state)
@@ -342,7 +346,7 @@ let tx user address code_hkey args =
 (* In ethereum, this is just a normal tx but with address 0 as destination *)
 let rethrow t (state,context) = match t (state,context) with
   | (Ok _,_) as r -> r
-  | (Error v,_) -> failwith v
+  | (Error (v,_),_) -> failwith v
 
 let tx_create user name t =
   is_admin >> fun (state,context) ->
