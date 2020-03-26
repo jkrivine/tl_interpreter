@@ -8,8 +8,8 @@
 * `char`: `Format.pp_print_char`
 * `float`: `Format.pp_print_float`
 * `pos`: `pp_pos`
-* `state`: pp_state
-* `context`: pp_context
+* `state`: `pp_state`
+* `context`: `pp_context`
 * `MP.t` (homogenous map): `MP.pp <pp_type_a> <pp_type b>`
 * `SP.t` (set): `SP.pp <pp_type_a>`
 * `HM.t` (heterogenous map): `HM.pp`
