@@ -398,7 +398,7 @@ let state_restore name =
 let echo str (state,context) =
   (ite_admin
   (fun () -> return (F.p Format.std_formatter "%s" str;F.cr ()))
-  (fun () -> return (F.p Format.std_formatter "%a ⇒ " Address.pp context.this;
+  (fun () -> return (F.p Format.std_formatter "%a | %a ⇒ " Address.pp context.caller Address.pp context.this;
            F.p Format.std_formatter "%s" str;F.cr ())))
   (state,context)
 
