@@ -16,7 +16,7 @@
 
 ## How to use
 
-Printing of data values stored in heterogenous maps is done by giving a pretty-printing (pp) function to their associated hkey's information. If no pp function is given, the value will be displayed as "<opaque>".
+Printing of data values stored in heterogenous maps is done by giving a pretty-printing (pp) function to their associated hkey's information. If no pp function is given, the value will be displayed as `<opaque>`.
 
 The pp function is given when the data hkey is declared, e.g.
 
