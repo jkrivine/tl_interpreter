@@ -17,6 +17,7 @@ let singleton = M.singleton
 let takeout m k = (M.remove m k, M.find m k)
 let change m k f = M.change m k ~f
 let mem m k = M.mem m k
+(* Print each map entry *)
 let pp fmt_k fmt_d fmt m =
   if M.is_empty m then
     F.p fmt "<empty MP>"

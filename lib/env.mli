@@ -17,12 +17,6 @@
  * Hmap-related stuff
  *)
 
-(* Type of the information contained in an hkey *)
-type 'a key_info
-
-(* Redefine Hmaps to work with the key_info type *)
-module Hmap : Hmap.S
-
 (*
  * Global chain stuff
  *)

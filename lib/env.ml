@@ -14,38 +14,6 @@
    not run the same code.  *)
 
 (*
- * Hmap-related stuff
- *)
-
-(* Type of the information contained in an hkey *)
-type 'a key_info = {
-  name: string;
-  pp: (Format.formatter -> 'a -> unit) option;
-  init: 'a option}
-
-(* Redefine Hmaps to work with the key_info type *)
-module Hmap = Hmap.Make(struct type 'a t = 'a key_info end)
-
-(* Bindings are ('a key, 'a) pairs *)
-let pp_binding fmt (Hmap.B (k,v)) =
-  let {name;pp;_} = Hmap.Key.info k in
-  if name = "<code>" then ()
-  else begin
-    F.cr (); match pp with
-    | None -> F.p fmt "%s ↦  <opaque>" name
-    | Some f ->
-      F.p fmt "%s ↦  " name;
-      F.with_indent (fun () -> F.p fmt "%a" f v)
-  end
-
-let pp_hmap fmt hmap =
-  if Hmap.cardinal hmap = 0 then(
-    F.p fmt "<empty hmap>"
-  )else (
-     F.with_indent (fun () -> Hmap.iter (fun b -> pp_binding fmt b) hmap)
-   )
-
-(*
  * Global chain stuff
  *)
 
@@ -53,7 +21,7 @@ let pp_hmap fmt hmap =
 (* The global storage is of the form address -> 'a key -> 'a *)
 (* Where 'a key is the type of map keys for a data of type 'a *)
 
-type storage = (Address.t,Hmap.t) MP.t
+type storage = (Address.t,HM.t) MP.t
 
 (* Current state contains *)
 type state = {
@@ -72,7 +40,7 @@ let empty_state = {
 let pp_state fmt state =
   F.p fmt "State at time %d:" state.time;
   F.cr ();
-  MP.pp Address.pp pp_hmap fmt state.hmaps;
+  MP.pp Address.pp HM.pp fmt state.hmaps;
   F.p fmt "\n"
 
 (* Type of an execution context *)
@@ -161,7 +129,7 @@ let is_admin =
 (* Direct access version *)
 let _get_hmap address hmaps = match MP.find hmaps address with
   | Some hmap -> hmap
-  | None -> Hmap.empty
+  | None -> HM.empty
 (* Monadic version *)
 let get_hmap (state,context) =
   (Ok (_get_hmap context.this state.hmaps),state)
@@ -174,7 +142,7 @@ let set_hmap hmap ({hmaps; _} as state,context) =
 
 (* Get value associated with [hkey] in this context's hmap *)
 (* Direct access version *)
-let _get_in_hmap_option hkey address hmaps = Hmap.find hkey (_get_hmap address hmaps)
+let _get_in_hmap_option hkey address hmaps = HM.find hkey (_get_hmap address hmaps)
 (* Monadic version *)
 let get_in_hmap_option hkey (state,context) =
   (Ok (_get_in_hmap_option hkey context.this state.hmaps), state)
@@ -188,16 +156,16 @@ let get_in_hmap hkey =
 (* Set value associated with [hkey] in this context's hmap *)
 let set_in_hmap hkey v =
   get_hmap >>= fun hmap ->
-  let hmap' = Hmap.add hkey v hmap in
+  let hmap' = HM.add hkey v hmap in
   set_hmap hmap'
 
 (*
  * Code-specific keys
  *)
-type ('a,'b) code_hkey = ('a -> 'b st) Hmap.key
+type ('a,'b) code_hkey = ('a -> 'b st) HM.key
 
 (* Initialize a new key for code *)
-let code () = Hmap.Key.create {name="<code>";init=None;pp=None}
+let code () = HM.Key.create {name="<code>";init=None;pp=None}
 
 let code_set code_hkey code (state,context) =
   if context.constructor then
@@ -221,14 +189,14 @@ let code_private f (state,context) =
 (* security-wise, we can add any unset key to hmap of a contract by giving it a
    key with a default value. It shouldn't be able to do anything with it
    though, we just use its data for free *)
-type 'a data_hkey = 'a Hmap.key
+type 'a data_hkey = 'a HM.key
 
 (* Initialize a new key for data *)
-let data ?init ?pp name = Hmap.Key.create {name;init;pp}
+let data ?init ?pp name = HM.Key.create {name;init;pp}
 
 let data_set (data_hkey: 'a data_hkey) (v:'a) = set_in_hmap data_hkey v
 
-let data_get data_hkey = match Hmap.Key.info data_hkey with
+let data_get data_hkey = match HM.Key.info data_hkey with
   | {init=Some default;_} -> get_in_hmap_option data_hkey >>= (function
     | Some v -> return v
     | None -> return default)
@@ -299,7 +267,7 @@ let execute f =
 (* Run `f` at a fresh address in a constructor context *)
 let create_contract name f (state,context) =
   let address = Address.next name in
-  let hmaps' = MP.set state.hmaps address Hmap.empty in
+  let hmaps' = MP.set state.hmaps address HM.empty in
   let state' = {state with hmaps=hmaps'} in
   let context' = {constructor=true;this=address;caller=context.this} in
   (f >>= fun ret -> return (address,ret)) (state',context')
@@ -319,7 +287,7 @@ let create_contract'
     (module C : Contract with type i = a and type o = b)
     (args:a) (state,context) =
   let address = Address.next name in
-  let hmaps' = MP.set state.hmaps address Hmap.empty in
+  let hmaps' = MP.set state.hmaps address HM.empty in
   let state' = {state with hmaps=hmaps'} in
   let context' = {constructor=true;this=address;caller=context.this} in
   ((C.construct args) >>= fun ret -> return (address,ret)) (state',context')
@@ -435,7 +403,7 @@ let echo str (state,context) =
    address *)
 let echo_data k =
   let* v = data_get k in
-  pp_binding Format.str_formatter (Hmap.B (k,v));
+  HM.pp_binding Format.str_formatter (HM.B (k,v));
   echo (Buffer.contents Format.stdbuf)
 
 (* Echo the current state *)
