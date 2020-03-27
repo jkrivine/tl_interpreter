@@ -1,3 +1,62 @@
+# 26/3/2020
+## A way to associate code to addresses
+To avoid having to split code&data declaration/definition, I could something like :
+
+```
+module MakeContract(F:functor(I:Interface) -> ContractInterface) = struct
+  module Construct = F
+  include F(Virtual)
+end
+
+
+module Contract1 = MakeContract(functor (I:Inst) ->
+  struct
+   let code = I.attach(code)
+  end
+end)
+
+create_contract (module C) = 
+let iface = new Interface in
+let module _ = C.Construct(new Interface) in
+iface.address
+```
+
+other solutions had no security: if you just do
+```
+let code = fun arg -> ...
+```
+then you can't tie that code to an address
+and if you do
+```
+module Contract(I:Inst) = struct
+ let code = I.attach (fun arg -> ...)
+end
+```
+Then how do you access the key 'code' except by reapplying `Contract(Virtual)` every time?
+So I think the above is nice.
+
+Also, private code could be either declared before `module Contract1 ...`, or:
+```
+module MakeContract(F:functor(I:Interface) -> ContractInterface) = struct
+  module Construct = F
+  include F(Virtual).Public
+end
+
+
+module Contract1 = MakeContract(functor (I:Inst) ->
+  struct
+   let utility_function = ...
+     module Public = struct
+       let code = I.attach(code)
+     end
+  end
+e
+
+create_contract (module C) = 
+let iface = new Interface in
+let module _ = C.Construct(new Interface) in
+iface
+```
 # 20/3/2020
 
 ## How to associate code to addresses

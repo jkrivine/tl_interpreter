@@ -3,11 +3,11 @@ open Env
 module Loan = struct
   let repay = code ()
   let seize = code ()
-  let construct dec ~time ~price:(t,a) =
+  let construct dec ~time ~price:(tk,a) =
     code_set repay (fun ((seller,buyer) as parties) ->
         let* seller_owner = call dec Dec.owner_of seller in
         (*call dec Dec.transfer_token_from_buyer (parties,buyer_owner,a,t) >>*)
-        call dec Dec.pay ((seller,buyer),Dec.Buyer,seller_owner,t,a) >>
+        call dec Dec.pay ((seller,buyer),Dec.Right,tk,a,seller_owner) >>
         call dec Dec.commit parties) >>
     code_set seize (fun parties ->
         let* current_time = time_get in
@@ -39,12 +39,12 @@ let () = ignore ( execute (
     (* uB injects 200 dollars in its Dec account *)
     tx uB dollar Token.transfer (200,dec) >>
     (* uA gives the 100 google to position u *)
-    tx uA dec Dec.transfer_token_to_provision (google,100,u) >>
+    tx uA dec Dec.transfer_token (google,100,u) >>
     (* Trade pos for dollar *)
     (* 1. uB gives $18 to uA *)
     tx uB dollar Token.transfer (18,uA) >>
     (* 2. uA gives v to uB *)
-    tx uA dec Dec.transfer_pos (v,uB) >>
+    tx uA dec Dec.transfer_address (v,uB) >>
     echo "Loan was established" >>
     echo_env >>
     state_save "loan" >>

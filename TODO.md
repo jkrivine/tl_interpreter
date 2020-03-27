@@ -13,8 +13,6 @@ how to do zcrossings? im thinking
 instead of the current stub based on transfer callback
 
 
-## Choose: are positions not contracts, 1 contract, 2 contracts?
-
 # Questions :
 * whats the point of having internal token ledgers if user can go out anytime?
    (apart from zcrossing, apart from unified interface that disregards ERC specifics)
