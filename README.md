@@ -52,8 +52,8 @@ The infix version of `bind` is `>>=`; it is convenient for chaining commands:
 ```
 (get_balance userA) >>= (fun balance -> <do something with userA's balance>)
 ```
-where (for illustration purposes) `balance user (state,context)
-= state.balances[user]`
+where (for illustration purposes) 
+`get_balance user (state,context) = (Ok state.balances[user],state)`
 
 `let*` is just additional syntactic sugar for `>>=` (which itself is `bind`). So :
 `let* x = a in b` is the same as `a >>= fun x -> b` is the same as `bind a (fun x -> b)`.
