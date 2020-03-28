@@ -352,10 +352,12 @@ let tx_create user name t =
   is_admin >> fun (state,context) ->
   (rethrow (create_contract name t) >>= fun (a,_) -> return a) (state,{context with this=user})
 
-(* not natively available in ethereum, included for convenience *)
 let proxy address f =
   is_admin >> fun (state,context) ->
   f (state,{context with this=address})
+
+(* not natively available in ethereum, included for convenience *)
+let tx_proxy user code = proxy user code
 
 (* Check if a contract has an entry for key `k` *)
 let if_responds address (k:('a,'b) code_hkey) (args:'a) : 'b option st = fun (state,context) ->
