@@ -8,11 +8,11 @@ module Loan = struct
         let* seller_owner = call dec Dec.owner_of seller in
         (*call dec Dec.transfer_token_from_buyer (parties,buyer_owner,a,t) >>*)
         call dec Dec.pay ((seller,buyer),Dec.Right,tk,a,seller_owner) >>
-        call dec Dec.commit parties) >>
+        call dec Dec.pull parties) >>
     code_set seize (fun parties ->
         let* current_time = time_get in
         if current_time > time then
-          call dec Dec.pull parties
+          call dec Dec.commit parties
         else
           return ())
 end
