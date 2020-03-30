@@ -165,7 +165,7 @@ let set_in_hmap hkey v =
 type ('a,'b) code_hkey = ('a -> 'b st) HM.key
 
 (* Initialize a new key for code *)
-let code () = HM.Key.create {name="<code>";init=None;pp=None}
+let code () = HM.Key.create {name="<code>";init=None;pp=None;hidden=true}
 
 let code_set code_hkey code (state,context) =
   if context.constructor then
@@ -192,14 +192,15 @@ let code_private f (state,context) =
 type 'a data_hkey = 'a HM.key
 
 (* Initialize a new key for data *)
-let data ?init ?pp name = HM.Key.create {name;init;pp}
+let data ?init ?pp name = HM.Key.create {name;init;pp;hidden=false}
+let data_hidden ?init () = HM.Key.create {name="<hidden>";init;pp=None;hidden=true}
 
 let data_set (data_hkey: 'a data_hkey) (v:'a) = set_in_hmap data_hkey v
 
 let data_get data_hkey = match HM.Key.info data_hkey with
   | {init=Some default;_} -> get_in_hmap_option data_hkey >>= (function
     | Some v -> return v
-    | None -> return default)
+    | None -> set_in_hmap data_hkey default >> return default)
   | {init=None;_} -> get_in_hmap data_hkey
 
 (* Simple read-and-write convenience *)

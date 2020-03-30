@@ -6,7 +6,8 @@
 type 'a key_info = {
   name: string;
   pp: (Format.formatter -> 'a -> unit) option;
-  init: 'a option
+  init: 'a option;
+  hidden: bool;
 }
 
 (* Redefine Hmaps to work with the key_info type *)
@@ -14,8 +15,8 @@ include Hmap.Make(struct type 'a t = 'a key_info end)
 
 (* Bindings are ('a key, 'a) pairs *)
 let pp_binding fmt (B (k,v)) =
-  let {name;pp;_} = Key.info k in
-  if name = "<code>" then ()
+  let {name;pp;hidden;_} = Key.info k in
+  if hidden then ()
   else begin
     F.cr (); match pp with
     | None -> F.p fmt "%s ↦  <opaque>" name

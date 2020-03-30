@@ -4,9 +4,10 @@ module Loan = struct
   let repay = code ()
   let seize = code ()
   let construct dec ~time ~price:(tk,a) =
-    code_set repay (fun ((seller,buyer) as parties) ->
+    Dec.Magic.z_protect_code_set dec repay (fun ((seller,buyer) as parties) ->
         let* seller_owner = call dec Dec.owner_of seller in
         (*call dec Dec.transfer_token_from_buyer (parties,buyer_owner,a,t) >>*)
+
         call dec Dec.pay ((seller,buyer),Dec.Right,tk,a,seller_owner) >>
         call dec Dec.pull parties) >>
     code_set seize (fun parties ->

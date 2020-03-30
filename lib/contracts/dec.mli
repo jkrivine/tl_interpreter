@@ -64,3 +64,7 @@ val balance_of : (A.t * token, amount) code_hkey
 val box_balance_of : (A.t * token, amount) code_hkey
 
 val construct : unit st
+
+module Magic : sig
+  val z_protect_code_set : Address.t -> ('a,'b) code_hkey -> ('a -> 'b st) -> unit st
+end

@@ -80,6 +80,8 @@ type 'a data_hkey
 
 (* Initialize a new key for data *)
 val data : ?init:'a -> ?pp:(Format.formatter -> 'a -> unit) -> string -> 'a data_hkey
+(* Initialize a new key which will not show when printing current stat e*)
+val data_hidden : ?init:'a -> unit -> 'a data_hkey
 
 val data_set : 'a data_hkey -> 'a -> unit st
 

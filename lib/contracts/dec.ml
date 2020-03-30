@@ -19,7 +19,29 @@ type side = Left | Right
 
 module Ledger =
 struct
-  type t = {map : ((A.t * token),amount) MP.t ; z_crossings : int}
+  type t = {map : ((A.t * token),amount) MP.t ; z_crossings : int; z_nestings: int}
+
+  let solvent hk =
+    let* {z_crossings;_} = data_get hk in
+    return (z_crossings = 0)
+
+  let z_nesting_incr hk =
+    data_update hk (fun l -> {l with z_nestings = l.z_nestings + 1})
+
+  let z_nesting_decr hk =
+    let* l = data_get hk in
+    let l' = {l with z_nestings = l.z_nestings - 1 } in
+    data_set hk l' >>
+    if l'.z_nestings = 0 then begin
+      let* is_solvent = solvent hk in
+      if is_solvent
+      then return ()
+      else error "ledger is not solvent"
+    end
+    else
+      return ()
+
+  let z_protect hk e = z_nesting_incr hk >> e >> z_nesting_decr hk
 
   let find hk k =
     let* l = data_get hk in
@@ -40,10 +62,12 @@ struct
     data_update hk (fun l ->
         let z = l.z_crossings in
         let modifier = if (a+v<0 && v>=0) then 1 else if (a+v>=0 && v<0) then (-1) else 0 in
-        {map = MP.set l.map (who,tk) (a+v);z_crossings = (z+modifier)})
+        {l with map = MP.set l.map (who,tk) (a+v);z_crossings = (z+modifier)})
 
   let transfer hk (giver:A.t) (tk:token) (a:amount) (taker:A.t) =
-    add hk giver tk (-a) >> add hk taker tk a
+    z_protect hk begin
+      add hk giver tk (-a) >> add hk taker tk a
+    end
 
   let transfer_up_to hk (giver:A.t) (tk:token) (a:amount) (taker:A.t) =
     let* b = balance hk giver tk in
@@ -53,21 +77,16 @@ struct
     let* a = balance hk giver tk in
     transfer hk giver tk a taker
 
-  let solvent hk =
-    let* {z_crossings;_} = data_get hk in
-    return (z_crossings = 0)
-
   let pp fmt l =
     F.p fmt "(%d zcrossings)" l.z_crossings;
     let printer fmt (addr,t) amount = F.cr (); F.p fmt "%a has %d%a" A.pp addr amount pp_token t in
     MP.pp_i fmt printer l.map
 
-  let empty = { map = MP.empty; z_crossings = 0; }
-
+  let empty = { map = MP.empty; z_crossings = 0; z_nestings = 0}
 end
 
 (*let pos_names : (pos,string) MP.t data_hkey*)
-  (*= data ~init:MP.empty                                    "position names"*)
+(*= data ~init:MP.empty                                    "position names"*)
 let ledger    = data ~pp:Ledger.pp                 ~init:Ledger.empty  "ledger"
 let owners    = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty      "owners"
 let sources   = data ~pp:(SP.pp A.pp)            ~init:SP.empty      "sources"
@@ -115,26 +134,83 @@ let box_of : (A.t, A.t option) code_hkey = code ()
 let balance_of : (A.t * token, amount) code_hkey = code ()
 (* Convenience composition of right_prov and get_balance *)
 let box_balance_of : (A.t * token, amount) code_hkey = code ()
+(* Obj.magic going on here *)
+let z_protect : (A.t * (unit,unit) code_hkey,unit) code_hkey = code ()
 
 
 (* Addresses can be contracts, users, or "just numbers". In particular, positions and provisions are represented by addresses but there is no content related to them in global blockchain storage *)
 (* Owner of a position is any address *)
 
 
- (*pos -> not pos *)
+(*pos -> not pos *)
 (*let pos_owner : (A.t,A.t) code_hkey = code ()*)
- (*provision -> any *)
- (*this is only needed because right provisions *)
-   (*can end up without an owning position *)
+(*provision -> any *)
+(*this is only needed because right provisions *)
+(*can end up without an owning position *)
 (*let provision_owner : (A.t,A.t) code_hkey = code ()*)
 
 (* a pos can own many ledgers! but it does NOT own its 'right ledger'. nobody owns that ledger,
-otherwise leftwards actors could have a say in the content of the right ledger. *)
+   otherwise leftwards actors could have a say in the content of the right ledger. *)
 
 (* any = pos | prov | other *)
 (* box = pos | prov *)
 
+module Magic = struct
+  (* FIXME: Not secure. The call should go through an additional 'proxy'
+     contract with any identity other than `dec`. Otherwise, as is we can ask
+     Dec to transfer money to anyone.
 
+     The following implements bouncing through `dec` to surround a call with
+     z-crossing parentheses.  We do it in an especially ugly way because, in
+     this OCaml version, we must deal with type safety. Since `z_protect` is a
+     stored procedure, it cannot be polymorphic (As a ref can only be weakly
+     polymorphic. There may be workarounds I'm not aware of.), so it cannot
+     take any `('a,'b) code_hkey` as argument (to wrap the execution of the
+     hkey in a z_(incr/decr)). We get around this limitation in a way which
+     would also work in Solidity: we define two variables (in Solidity:
+     getter/setters), the fist for input data, which is set before caling the
+     function. The function sets the second (for output data) and returns unit.
+     Thus z_protect can have type `((unit,unit) code_hkey,unit) code_hkey`.
+
+     If a segment `s` wants to initiate a call, it may get z-crossing by
+     wrapping its code between
+
+     ``` z_nesting_incr <code> z_nesting_decr ```
+
+     However Dec cannot accept any public call to `z_nesting_incr` otherwise
+     the nesting may not end with a solvency check, and a transaction could
+     succeed with Dec still insolvent.
+
+     This is fixed by `s` giving an hkey `hk` to `Dec` which `Dec` calls :
+
+     ``` z_nesting_incr call s hkey () z_nesting decr ```
+
+     Now `Dec` can safely know that whatever happens in the call, the
+     transaction will not succeed without a successful solvency check.
+
+     The above is unsatisfactory for 2 reasons: 1) Dec is calling arbitrary
+     code with its own identity 2) If a method from `s` requires a caller
+     identity check (eg only user u can trigger forward), the above scheme
+     breaks.
+
+     To fix 1), Dec should have a proxy `p` which implements the
+     z_nesting_(incr/decr) wrapping. to fix 2), that proxy `p` should pass a
+     caller argument to the segment `s`, which `s` should know it can trust.
+  *)
+  let z_protect_code_set dec code_hkey commands =
+    let in_args = Env.data_hidden ()
+    and out_args = Env.data_hidden ()
+    and internal_hkey = Env.code () in
+    let* this  = get_this in
+    code_set internal_hkey (fun () ->
+        let* args = data_get in_args in
+        let* ret = commands args in
+        data_set out_args ret) >>
+    code_set code_hkey (fun args ->
+        data_set in_args args >>
+        Env.call dec z_protect (this,internal_hkey)
+        >> data_get out_args)
+end
 
 let construct =
 
@@ -172,12 +248,12 @@ let construct =
         | None -> error "No segment for position source")
 
   (*and transfer_token_from (giver,tk,a,taker) =*)
-    (*Ledger.transfer ledger giver tk a taker*)
+  (*Ledger.transfer ledger giver tk a taker*)
 
   and transfer_token' tk a taker  =
     let* giver = get_caller in
     Ledger.transfer ledger giver tk a taker
-    (*transfer_token_from (giver,tk,a,taker)*)
+  (*transfer_token_from (giver,tk,a,taker)*)
 
   and transfer_address_from giver addr taker  =
     let* addr_owner = map_find_exn owners addr in
@@ -190,11 +266,11 @@ let construct =
     transfer_address_from giver addr taker
 
 
-(* given source,
-   if in position
-   source---(segment)---target, return Some (segment,target)
-   if in position
-   source---X, return None *)
+  (* given source,
+     if in position
+     source---(segment)---target, return Some (segment,target)
+     if in position
+     source---X, return None *)
   and sell_side source =
     let* target_opt = map_find nexts source in
     let* segment_opt = map_find segments source in
@@ -288,14 +364,14 @@ let construct =
     let* owner = map_find_exn owners giver in
     Ledger.transfer_all ledger giver tk owner
 
-(* addr should be a pos or a box *)
+  (* addr should be a pos or a box *)
   and collect_address' giver addr =
     require_collectable giver >>
     (* need to add pos to deads ?*)
     let* owner = map_find_exn owners giver in
     transfer_address_from giver addr owner
 
-(* UNSAFE *)
+  (* UNSAFE *)
   and pay' (seller,buyer) giver_side token amount taker =
     legal_call (seller,buyer) >>
     let* giver = map_find_exn owners (if giver_side = Right then buyer else seller) in
@@ -306,6 +382,15 @@ let construct =
     map_find boxes giver >>= function
     | None -> return ()
     | Some b -> let* owner = map_find_exn owners giver in map_set owners b owner
+
+  (* This feels very dangerous. Is it OK? yes as long as protection occurs through yet
+     another contract. *)
+  and z_protect' (address,hkey) =
+    Ledger.z_protect ledger begin
+      call address hkey ()
+    end
+
+
 
   in
   (* UNSAFE *)
@@ -321,6 +406,8 @@ let construct =
   code_set balance_of (fun (a,tk) -> Ledger.balance ledger a tk) >>
   code_set box_balance_of (fun (a,tk) -> callthis box_of a >>=
                             function None -> return 0 | Some b -> callthis balance_of (b,tk))
+  >>
+  code_set z_protect z_protect'
   >>
   code_set transfer_token (fun (tk,a,t) -> transfer_token' tk a t) >>
   code_set transfer_address (fun (g,t) -> transfer_address' g t) >>
