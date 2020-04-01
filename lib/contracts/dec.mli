@@ -19,10 +19,10 @@ type side = Left | Right
 module Ledger : sig
   type t
 
-  val balance : t data_hkey -> A.t -> token -> amount st
-  val transfer : t data_hkey -> A.t -> token -> amount -> A.t -> unit st
-  val transfer_up_to : t data_hkey -> A.t -> token -> amount -> A.t -> unit st
-  val transfer_all : t data_hkey -> A.t -> token -> A.t -> unit st
+  val balance : t data_hkey -> A.t -> ?index:string -> token -> amount st
+  val transfer : t data_hkey -> A.t -> ?index:string -> token -> amount -> A.t -> unit st
+  val transfer_up_to : t data_hkey -> A.t -> ?index:string -> token -> amount -> A.t -> unit st
+  val transfer_all : t data_hkey -> A.t -> ?index:string -> token -> A.t -> unit st
   val solvent : t data_hkey -> bool st
   val pp : Format.formatter -> t -> unit
   val empty : t

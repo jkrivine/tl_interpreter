@@ -19,7 +19,7 @@ type side = Left | Right
 
 module Ledger =
 struct
-  type t = {map : ((A.t * token),amount) MP.t ; z_crossings : int; z_nestings: int}
+  type t = {map : ((A.t * string * token),amount) MP.t ; z_crossings : int; z_nestings: int}
 
   let solvent hk =
     let* {z_crossings;_} = data_get hk in
@@ -41,7 +41,10 @@ struct
     else
       return ()
 
-  let z_protect hk e = z_nesting_incr hk >> e >> z_nesting_decr hk
+  let z_protect hk e =
+       z_nesting_incr hk
+    >> e
+    >> z_nesting_decr hk
 
   let find hk k =
     let* l = data_get hk in
@@ -53,52 +56,51 @@ struct
     | None -> error "not found"
   [@@ocaml.warning "-32"]
 
-  let balance hk (who:A.t) (tk:token) =
+  let balance hk (who:A.t) ?(index="") (tk:token) =
     let* l = data_get hk in
-    return (MP.find l.map (who,tk) |? 0)
+    return (MP.find l.map (who,index,tk) |? 0)
 
-  let add hk (who:A.t) (tk:token) (a:amount) =
-    let* v = balance hk who tk in
+  let add hk (who:A.t) ?(index="") (tk:token) (a:amount) =
+    let* v = balance hk who ~index tk in
     data_update hk (fun l ->
         let z = l.z_crossings in
         let modifier = if (a+v<0 && v>=0) then 1 else if (a+v>=0 && v<0) then (-1) else 0 in
-        {l with map = MP.set l.map (who,tk) (a+v);z_crossings = (z+modifier)})
+        {l with map = MP.set l.map (who,index,tk) (a+v);z_crossings = (z+modifier)})
 
-  let transfer hk (giver:A.t) (tk:token) (a:amount) (taker:A.t) =
+  let transfer hk (giver:A.t) ?(index="") (tk:token) (a:amount) (taker:A.t) =
     z_protect hk begin
-      add hk giver tk (-a) >> add hk taker tk a
+      add hk giver ~index tk (-a) >> add hk taker ~index tk a
     end
 
-  let transfer_up_to hk (giver:A.t) (tk:token) (a:amount) (taker:A.t) =
-    let* b = balance hk giver tk in
-    transfer hk giver tk (min a b) taker
+  let transfer_up_to hk (giver:A.t) ?(index="") (tk:token) (a:amount) (taker:A.t) =
+    let* b = balance hk giver ~index tk in
+    transfer hk giver ~index tk (min a b) taker
 
-  let transfer_all hk (giver:A.t) (tk:token) (taker:A.t) =
-    let* a = balance hk giver tk in
-    transfer hk giver tk a taker
+  let transfer_all hk (giver:A.t) ?(index="") (tk:token) (taker:A.t) =
+    let* a = balance hk giver ~index tk in
+    transfer hk giver ~index tk a taker
 
   let pp fmt l =
-    F.p fmt "(%d zcrossings)" l.z_crossings;
-    let printer fmt (addr,t) amount = F.cr (); F.p fmt "%a has %d%a" A.pp addr amount pp_token t in
+    F.p fmt "(%d zcrossings, %d znestings)" l.z_crossings l.z_nestings;
+    let printer fmt (addr,index,t) amount = F.cr (); F.p fmt "%a.%s has %d%a" A.pp addr index amount pp_token t in
     MP.pp_i fmt printer l.map
 
   let empty = { map = MP.empty; z_crossings = 0; z_nestings = 0}
 end
 
-(*let pos_names : (pos,string) MP.t data_hkey*)
-(*= data ~init:MP.empty                                    "position names"*)
-let ledger    = data ~pp:Ledger.pp                 ~init:Ledger.empty  "ledger"
-let owners    = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty      "owners"
-let sources   = data ~pp:(SP.pp A.pp)            ~init:SP.empty      "sources"
-let nexts     = data ~pp:(MP.pp A.pp A.pp)     ~init:MP.empty      "nexts"
-let segments  = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty      "segments"
-let deads     = data ~pp:(SP.pp A.pp)            ~init:SP.empty      "deads"
+(*  <key>    = data ~pp:<printing fn>     ~init:<init value> <display name> *)
+let ledger   = data ~pp:Ledger.pp         ~init:Ledger.empty "ledger"
+let owners   = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "owners"
+let sources  = data ~pp:(SP.pp A.pp)      ~init:SP.empty     "sources"
+let nexts    = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "nexts"
+let segments = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "segments"
+let deads    = data ~pp:(SP.pp A.pp)      ~init:SP.empty     "deads"
+let boxes    = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "boxes"
 (* Positions have two 'boxes', a forward one and a backward one.
    The backward one is tied to the position itself. It cannot be detached.
    The forward one is called its 'box'.
    A box can be owned by anyone: a position, a user, another box, a contract...
    But boxes b come into existence owned by nobody, and attached as the box of a position p. Morally, b is the 'forward box' of p. This does *not* mean that p owns b. In that case, b would morally be in the 'backward box' of p. *)
-let boxes     = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty      "boxes"
 
 let echo_dec =
   echo_data ledger >>
@@ -118,9 +120,11 @@ let pull : (parties, unit) code_hkey = code ()
 let commit  : (parties, unit) code_hkey = code ()
 (* Transfers *)
 let collect_token : (A.t * token, unit) code_hkey = code ()
+let collect_token_indexed : (A.t * string * token, unit) code_hkey = code ()
 let collect_address : (A.t * A.t, unit) code_hkey = code ()
 let collect_box : (A.t, unit) code_hkey = code ()
 let transfer_token : (token * amount * A.t, unit) code_hkey = code ()
+let transfer_token_indexed : (string * token * amount * A.t, unit) code_hkey = code ()
 let transfer_address : (A.t * A.t, unit) code_hkey = code ()
 (* UNSAFE *)
 let pay : (parties * side * token * amount * A.t,unit) code_hkey = code ()
@@ -132,6 +136,7 @@ let owner_of  : (A.t, A.t) code_hkey = code ()
 let box_of : (A.t, A.t option) code_hkey = code ()
 (* any -> ... *)
 let balance_of : (A.t * token, amount) code_hkey = code ()
+let balance_of_indexed : (A.t * string * token, amount) code_hkey = code ()
 (* Convenience composition of right_prov and get_balance *)
 let box_balance_of : (A.t * token, amount) code_hkey = code ()
 (* Obj.magic going on here *)
@@ -167,10 +172,11 @@ module Magic = struct
      polymorphic. There may be workarounds I'm not aware of.), so it cannot
      take any `('a,'b) code_hkey` as argument (to wrap the execution of the
      hkey in a z_(incr/decr)). We get around this limitation in a way which
-     would also work in Solidity: we define two variables (in Solidity:
-     getter/setters), the fist for input data, which is set before caling the
-     function. The function sets the second (for output data) and returns unit.
-     Thus z_protect can have type `((unit,unit) code_hkey,unit) code_hkey`.
+     would also work in Solidity: we define two variables `_in`, `_out` (in
+     Solidity: getter/setters), `_in` for input data, which is set before
+     calling the function. That function sets `_out` (for output data) and
+     returns unit.  Thus z_protect can have type `((unit,unit) code_hkey,unit)
+     code_hkey`.
 
      If a segment `s` wants to initiate a call, it may get z-crossing by
      wrapping its code between
@@ -250,9 +256,9 @@ let construct =
   (*and transfer_token_from (giver,tk,a,taker) =*)
   (*Ledger.transfer ledger giver tk a taker*)
 
-  and transfer_token' tk a taker  =
+  and transfer_token' ?(index="") tk a taker  =
     let* giver = get_caller in
-    Ledger.transfer ledger giver tk a taker
+    Ledger.transfer ledger giver ~index tk a taker
   (*transfer_token_from (giver,tk,a,taker)*)
 
   and transfer_address_from giver addr taker  =
@@ -358,11 +364,11 @@ let construct =
     then return ()
     else error "Not collectable"
 
-  and collect_token' giver tk =
+  and collect_token' giver ?(index="") tk =
     require_collectable giver >>
     (* need to add pos to deads ?*)
     let* owner = map_find_exn owners giver in
-    Ledger.transfer_all ledger giver tk owner
+    Ledger.transfer_all ledger giver ~index tk owner
 
   (* addr should be a pos or a box *)
   and collect_address' giver addr =
@@ -372,10 +378,10 @@ let construct =
     transfer_address_from giver addr owner
 
   (* UNSAFE *)
-  and pay' (seller,buyer) giver_side token amount taker =
-    legal_call (seller,buyer) >>
-    let* giver = map_find_exn owners (if giver_side = Right then buyer else seller) in
-    Ledger.transfer ledger giver token amount taker
+  and pay' (source,target) giver_side ?(index="") token amount taker =
+    legal_call (source,target) >>
+    let* giver = map_find_exn owners (if giver_side = Right then target else source) in
+    Ledger.transfer ledger giver ~index token amount taker
 
   and collect_box' giver =
     require_collectable giver >>
@@ -394,28 +400,31 @@ let construct =
 
   in
   (* UNSAFE *)
-  code_set pay (fun (p,g,tk,a,t) -> pay' p g tk a t) >>
+  code_set pay (fun (p,g,tk,a,t) -> pay' p g ~index:"" tk a t) >>
   code_set init_tl (fun (s,t,c) -> init_tl' s t c) >>
   code_set grow grow' >>
   code_set pull pull' >>
   code_set commit commit' >>
-  code_set collect_token (fun (g,t) -> collect_token' g t) >>
+  code_set collect_token (fun (g,t) -> collect_token' g ~index:"" t) >>
+  code_set collect_token_indexed (fun (g,index,t) -> collect_token' g ~index t) >>
   code_set collect_address (fun (g,a) -> collect_address' g a) >>
   code_set owner_of (fun p -> map_find_exn owners p) >>
   code_set box_of (fun a -> map_find boxes a) >>
-  code_set balance_of (fun (a,tk) -> Ledger.balance ledger a tk) >>
+  code_set balance_of (fun (a,tk) -> Ledger.balance ledger a ~index:"" tk) >>
+  code_set balance_of_indexed (fun (a,index,tk) -> Ledger.balance ledger a ~index tk) >>
   code_set box_balance_of (fun (a,tk) -> callthis box_of a >>=
                             function None -> return 0 | Some b -> callthis balance_of (b,tk))
   >>
   code_set z_protect z_protect'
   >>
-  code_set transfer_token (fun (tk,a,t) -> transfer_token' tk a t) >>
+  code_set transfer_token (fun (tk,a,t) -> transfer_token' ~index:"" tk a t) >>
+  code_set transfer_token_indexed (fun (index,tk,a,t) -> transfer_token' ~index tk a t) >>
   code_set transfer_address (fun (g,t) -> transfer_address' g t) >>
   code_set collect_box collect_box' >>
   code_set Token.on_token_receive
     (fun (giver,token,amount) ->
        let* caller = get_caller in
        if caller = token then
-         Ledger.add ledger giver token amount
+         Ledger.add ledger giver ~index:"" token amount
        else
          return ())
