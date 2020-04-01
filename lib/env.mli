@@ -147,6 +147,13 @@ val delegatecall : Address.t -> ('a,'b) code_hkey -> 'a -> 'b st
 (* Convenience, do a call at current address *)
 val callthis : ('a,'b) code_hkey -> 'a -> 'b st
 
+(* Check if result of evaluating two commands, are equal *)
+val is_equal : 'a st -> 'a st -> bool st
+
+(* Check boolean value, throw if false *)
+val require : bool st -> unit st
+
+
 (* Run the given code (only allowed in a constructor, it is used to simulate
    inheritance but `inherit` is a reserved keyword, so we use `import` *)
 val import : 'a st -> 'a st

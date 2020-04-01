@@ -63,8 +63,10 @@ val balance_of : (A.t * token, amount) code_hkey
 (* Convenience composition of right_prov and get_balance *)
 val box_balance_of : (A.t * token, amount) code_hkey
 
+val proxy : (unit,A.t) code_hkey
 val construct : unit st
 
-module Magic : sig
-  val z_protect_code_set : Address.t -> ('a,'b) code_hkey -> ('a -> 'b st) -> unit st
+module Proxy : sig
+  val bounce : (A.t * ((A.t,unit) code_hkey), unit) code_hkey
+  val construct : A.t -> unit st
 end

@@ -140,91 +140,46 @@ let balance_of_indexed : (A.t * string * token, amount) code_hkey = code ()
 (* Convenience composition of right_prov and get_balance *)
 let box_balance_of : (A.t * token, amount) code_hkey = code ()
 (* Obj.magic going on here *)
-let z_protect : (A.t * (unit,unit) code_hkey,unit) code_hkey = code ()
+(*let z_protect : (A.t * (unit,unit) code_hkey,unit) code_hkey = code ()*)
+let proxy : (unit,A.t) code_hkey = code ()
+let z_nesting_incr = code ()
+let z_nesting_decr  = code ()
 
-
-(* Addresses can be contracts, users, or "just numbers". In particular, positions and provisions are represented by addresses but there is no content related to them in global blockchain storage *)
-(* Owner of a position is any address *)
-
-
-(*pos -> not pos *)
-(*let pos_owner : (A.t,A.t) code_hkey = code ()*)
-(*provision -> any *)
-(*this is only needed because right provisions *)
-(*can end up without an owning position *)
-(*let provision_owner : (A.t,A.t) code_hkey = code ()*)
-
-(* a pos can own many ledgers! but it does NOT own its 'right ledger'. nobody owns that ledger,
-   otherwise leftwards actors could have a say in the content of the right ledger. *)
-
-(* any = pos | prov | other *)
-(* box = pos | prov *)
-
-module Magic = struct
-  (* FIXME: Not secure. The call should go through an additional 'proxy'
-     contract with any identity other than `dec`. Otherwise, as is we can ask
-     Dec to transfer money to anyone.
-
-     The following implements bouncing through `dec` to surround a call with
-     z-crossing parentheses.  We do it in an especially ugly way because, in
-     this OCaml version, we must deal with type safety. Since `z_protect` is a
-     stored procedure, it cannot be polymorphic (As a ref can only be weakly
-     polymorphic. There may be workarounds I'm not aware of.), so it cannot
-     take any `('a,'b) code_hkey` as argument (to wrap the execution of the
-     hkey in a z_(incr/decr)). We get around this limitation in a way which
-     would also work in Solidity: we define two variables `_in`, `_out` (in
-     Solidity: getter/setters), `_in` for input data, which is set before
-     calling the function. That function sets `_out` (for output data) and
-     returns unit.  Thus z_protect can have type `((unit,unit) code_hkey,unit)
-     code_hkey`.
-
-     If a segment `s` wants to initiate a call, it may get z-crossing by
-     wrapping its code between
-
-     ``` z_nesting_incr <code> z_nesting_decr ```
-
-     However Dec cannot accept any public call to `z_nesting_incr` otherwise
-     the nesting may not end with a solvency check, and a transaction could
-     succeed with Dec still insolvent.
-
-     This is fixed by `s` giving an hkey `hk` to `Dec` which `Dec` calls :
-
-     ``` z_nesting_incr call s hkey () z_nesting decr ```
-
-     Now `Dec` can safely know that whatever happens in the call, the
-     transaction will not succeed without a successful solvency check.
-
-     The above is unsatisfactory for 2 reasons: 1) Dec is calling arbitrary
-     code with its own identity 2) If a method from `s` requires a caller
-     identity check (eg only user u can trigger forward), the above scheme
-     breaks.
-
-     To fix 1), Dec should have a proxy `p` which implements the
-     z_nesting_(incr/decr) wrapping. to fix 2), that proxy `p` should pass a
-     caller argument to the segment `s`, which `s` should know it can trust.
-  *)
-  let z_protect_code_set dec code_hkey commands =
-    let in_args = Env.data_hidden ()
-    and out_args = Env.data_hidden ()
-    and internal_hkey = Env.code () in
-    let* this  = get_this in
-    code_set internal_hkey (fun () ->
-        let* args = data_get in_args in
-        let* ret = commands args in
-        data_set out_args ret) >>
-    code_set code_hkey (fun args ->
-        data_set in_args args >>
-        Env.call dec z_protect (this,internal_hkey)
-        >> data_get out_args)
+module Proxy = struct
+  let bounce = code ()
+  let construct dec =
+    code_set bounce (fun (caller',destination) ->
+      call dec z_nesting_incr () >>
+      let* caller = get_caller in
+      call caller destination caller' >>
+      call dec z_nesting_decr ())
 end
 
-let construct =
 
+let construct =
+  (* Zprotect /  *)
+  let* this = get_this in
+  let* (_proxy,()) = create_contract "dec.proxy" (Proxy.construct this) in
+  let z_nesting_incr' () =
+    let* caller = get_caller in
+    require (return (_proxy = caller)) >>
+    Ledger.z_nesting_incr ledger
+  and z_nesting_decr' () =
+    let* caller = get_caller in
+    require (return (_proxy = caller)) >>
+    Ledger.z_nesting_decr ledger
+  in
+  code_set proxy (fun () -> return _proxy) >>
+  code_set z_nesting_incr z_nesting_incr' >>
+  code_set z_nesting_decr z_nesting_decr' >>
+
+  (* Dec *)
   let rec new_pos s =
     let* pos = create_user s in
     let* box = create_user (s^".box") in
     map_set boxes pos box >>
     return pos
+
 
   and set_owner pos owner = map_set owners pos owner
 
@@ -389,13 +344,6 @@ let construct =
     | None -> return ()
     | Some b -> let* owner = map_find_exn owners giver in map_set owners b owner
 
-  (* This feels very dangerous. Is it OK? yes as long as protection occurs through yet
-     another contract. *)
-  and z_protect' (address,hkey) =
-    Ledger.z_protect ledger begin
-      call address hkey ()
-    end
-
 
 
   in
@@ -414,8 +362,6 @@ let construct =
   code_set balance_of_indexed (fun (a,index,tk) -> Ledger.balance ledger a ~index tk) >>
   code_set box_balance_of (fun (a,tk) -> callthis box_of a >>=
                             function None -> return 0 | Some b -> callthis balance_of (b,tk))
-  >>
-  code_set z_protect z_protect'
   >>
   code_set transfer_token (fun (tk,a,t) -> transfer_token' ~index:"" tk a t) >>
   code_set transfer_token_indexed (fun (index,tk,a,t) -> transfer_token' ~index tk a t) >>

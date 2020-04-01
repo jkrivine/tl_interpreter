@@ -318,6 +318,14 @@ let delegatecall address code_hkey args (state,context) =
 let callthis chk args (state,context) =
   delegatecall context.this chk args (state,context)
 
+let is_equal t1 t2 =
+  let* r1 = t1 in
+  let* r2 = t2 in
+  return (r1 = r2)
+
+let require b =
+  b >>= function true -> return () | false -> error "require failed"
+
 
 (* Run the given code (only allowed in a constructor, it is used to simulate
    inheritance but `inherit` is a reserved keyword, so we use `import` *)
