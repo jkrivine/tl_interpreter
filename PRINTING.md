@@ -2,7 +2,7 @@
 
 ## Quick reference of common pretty-printing functions
 
-* `string`: `Format.pp_print_string`
+* `string,int,bool,char,float`: `F.pp_string, ..., F.pp_float`
 * `int`: `Format.pp_print_int`
 * `bool`: `Format.pp_print_bool`
 * `char`: `Format.pp_print_char`

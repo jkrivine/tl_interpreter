@@ -19,3 +19,9 @@ let p fmt s =
   (*Format.formatter ->*)
 (*(unit, Format.formatter, unit, unit, unit, unit)*)
 (*CamlinternalFormatBasics.format6 -> unit*)
+(* shortcuts*)
+let pp_string = Format.pp_print_string
+let pp_int = Format.pp_print_int
+let pp_bool = Format.pp_print_bool
+let pp_char = Format.pp_print_char
+let pp_float = Format.pp_print_float
