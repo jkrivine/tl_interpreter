@@ -4,14 +4,14 @@ module Loan = struct
   let repay = code ()
   let seize = code ()
   let construct dec ~time ~price:(tk,a) =
-    let* proxy = call dec Dec.proxy () in
-    Magic.z_protect proxy repay (fun (caller,((seller,buyer) as parties)) ->
+    let* zwrapper = call dec Dec.get_zwrapper () in
+    Macro.zwrap zwrapper repay (fun (caller,((seller,buyer) as parties)) ->
         let* seller_owner = call dec Dec.owner_of seller in
         (*call dec Dec.transfer_token_from_buyer (parties,buyer_owner,a,t) >>*)
 
         call dec Dec.pay (parties,Dec.Right,tk,a,seller_owner) >>
         call dec Dec.pull parties) >>
-    Magic.z_protect proxy seize (fun (caller,parties) ->
+    Macro.zwrap zwrapper seize (fun (caller,parties) ->
         let* current_time = time_get in
         if current_time > time then
           call dec Dec.commit parties

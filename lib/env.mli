@@ -166,7 +166,7 @@ val tx : Address.t -> Address.t -> ('a,'b) code_hkey -> 'a -> unit st
 val tx_create : Address.t -> string -> 'a st -> Address.t st
 
 (* not natively available in ethereum, included for convenience *)
-val proxy : Address.t -> 'a st -> 'a st
+val proxy : Address.t -> ?caller:Address.t -> 'a st -> 'a st
 
 (* Check if a contract has an entry for key `k` *)
 val if_responds : Address.t -> ('a,'b) code_hkey -> 'a -> 'b option st

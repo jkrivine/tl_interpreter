@@ -1,3 +1,4 @@
+open Tools
 (* The general theme here is: contracts are executed in a context specifying
    `this`, which is an address.  There is a global storage which associates a
    heterogenous map to each address.  This map can contain data, code, etc.
@@ -361,9 +362,9 @@ let tx_create user name t =
   is_admin >> fun (state,context) ->
   (rethrow (create_contract name t) >>= fun (a,_) -> return a) (state,{context with this=user})
 
-let proxy address f =
+let proxy address ?caller f =
   is_admin >> fun (state,context) ->
-  f (state,{context with this=address})
+  f (state,{context with this=address; caller=(caller |? context.caller)})
 
 (* not natively available in ethereum, included for convenience *)
 let tx_proxy user code = proxy user code

@@ -1,3 +1,20 @@
+# 1/4/2020
+
+## General note & question about zcrossing:
+
+All this nesting is at least doubling the call stack depth which is 1024 on
+ethereum (and 64 with gas restrictions?) It also consumes more gas to always
+bounce twice every time.
+
+Maybe in practice people will upload a contract containing a long sequence of
+commands. Then it wraps that contract in a zwrap. In that case, any 'defensive'
+zwrap called along the way should probably _avoid_ bouncing through zwrap!
+
+So the proper macro should first _test_ whether Dec is currently zwrapping! By
+calling Dec.is_zwrapping. If yes, no need to 'add 1'! And thus no need for
+z_nestings.
+
+
 # 26/3/2020
 ## A way to associate code to addresses
 To avoid having to split code&data declaration/definition, I could something like :

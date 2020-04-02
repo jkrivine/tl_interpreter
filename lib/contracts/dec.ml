@@ -141,35 +141,42 @@ let balance_of_indexed : (A.t * string * token, amount) code_hkey = code ()
 let box_balance_of : (A.t * token, amount) code_hkey = code ()
 (* Obj.magic going on here *)
 (*let z_protect : (A.t * (unit,unit) code_hkey,unit) code_hkey = code ()*)
-let proxy : (unit,A.t) code_hkey = code ()
+let get_zwrapper : (unit,A.t) code_hkey = code ()
 let z_nesting_incr = code ()
 let z_nesting_decr  = code ()
 
-module Proxy = struct
-  let bounce = code ()
+
+module Zwrapper = struct
+  let dec_addr = data "dec_addr"
   let construct dec =
-    code_set bounce (fun (caller',destination) ->
-      call dec z_nesting_incr () >>
-      let* caller = get_caller in
-      call caller destination caller' >>
-      call dec z_nesting_decr ())
+    data_set dec_addr dec
+  module Magic = struct
+    let call_zwrap zwrapper (caller,key,args) =
+      Env.proxy zwrapper ~caller (
+        let* dec = data_get dec_addr in
+        call dec z_nesting_incr () >>
+        let* caller' = get_caller in
+        call caller' key (caller,args) >>= fun ret ->
+        call dec z_nesting_decr () >>
+        return ret
+      )
+  end
 end
 
 
 let construct =
   (* Zprotect /  *)
   let* this = get_this in
-  let* (_proxy,()) = create_contract "dec.proxy" (Proxy.construct this) in
+  let* (zwrapper,()) =
+    create_contract "dec.zwrapper" (Zwrapper.construct this) in
   let z_nesting_incr' () =
-    let* caller = get_caller in
-    require (return (_proxy = caller)) >>
+    require (is_equal get_caller (callthis get_zwrapper ())) >>
     Ledger.z_nesting_incr ledger
   and z_nesting_decr' () =
-    let* caller = get_caller in
-    require (return (_proxy = caller)) >>
+    require (is_equal get_caller (callthis get_zwrapper ())) >>
     Ledger.z_nesting_decr ledger
   in
-  code_set proxy (fun () -> return _proxy) >>
+  code_set get_zwrapper (fun () -> return zwrapper) >>
   code_set z_nesting_incr z_nesting_incr' >>
   code_set z_nesting_decr z_nesting_decr' >>
 

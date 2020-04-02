@@ -63,10 +63,17 @@ val balance_of : (A.t * token, amount) code_hkey
 (* Convenience composition of right_prov and get_balance *)
 val box_balance_of : (A.t * token, amount) code_hkey
 
-val proxy : (unit,A.t) code_hkey
+val get_zwrapper : (unit,A.t) code_hkey
 val construct : unit st
 
-module Proxy : sig
-  val bounce : (A.t * ((A.t,unit) code_hkey), unit) code_hkey
+(*module Proxy : sig*)
+  (*val bounce : (A.t * ((A.t,unit) code_hkey), unit) code_hkey*)
+  (*val construct : A.t -> unit st*)
+(*end*)
+
+module Zwrapper : sig
   val construct : A.t -> unit st
+  module Magic : sig
+    val call_zwrap : A.t -> (A.t * ((A.t*'a),'b) code_hkey * 'a) -> 'b st
+  end
 end
