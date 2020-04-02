@@ -7,7 +7,7 @@ module A = Address
    workarounds I'm not aware of.), so it cannot take any `('a,'b) code_hkey` as
    argument (to wrap the execution of the hkey in a z_(incr/decr)). We get
    around this limitation by making zwrapping a function of a module
-   Zwrapper.Magic.
+   ZwrapProxy.Magic.
 
    If a segment `s` wants to initiate a call, it may get z-crossing by
    wrapping its code between
@@ -39,30 +39,36 @@ module A = Address
    2) If a method from `s` requires a caller identity check (eg only user u can
    trigger forward), the above scheme breaks.
 
-   To fix 1), Dec should have a proxy `z` (a 'zwrapper') which implements the
-   z_nesting_(incr/decr) wrapping. to fix 2), that zwrapper `z` should pass a
+   To fix 1), Dec should have a proxy `z` (a 'ZwrapProxy) which implements the
+   z_nesting_(incr/decr) wrapping. to fix 2), that ZwrapProxy `z` should pass a
    caller argument to the segment `s`, which `s` should know it can trust.
 *)
 
-(* Macro: Ask `zwrapper to call a zprotected
+(* Macro: bind to `public_hkey` a call to `cmd` which is zprotected by a bounce
+   through zwrap_proxy. *)
+let zwrap dec public_hkey cmd =
+  let* zwrap_proxy = call dec Dec.get_zwrap_proxy () in
+
+  let private_hkey = Env.code () in
+
+(* Macro: Ask `zwrap_proxy` to call a zprotected
    version of `private_hkey and pass along the current `caller`. `private_hkey`
    will be called at the current `this`.
 *)
-let zwrap_launch zwrapper private_hkey = fun args ->
-  let* caller = Env.get_caller in
-  Dec.Zwrapper.Magic.call_zwrap zwrapper (caller,private_hkey,args)
+  Env.code_set public_hkey begin fun args ->
+    let* caller = Env.get_caller in
+    let* is_zwrapping = call dec Dec.is_zwrapping () in
+    if is_zwrapping
+    then callthis private_hkey (caller,args)
+    else Dec.ZwrapProxy.Magic.call_zwrap zwrap_proxy (caller,private_hkey,args)
+  end >>
 
 (* Macro : run `cmd` on `args`. In addition, pass a `caller` argument to
    `cmd` which is supposed to be the caller before bouncing. It can be trusted.
 *)
-let zwrap_receive zwrapper cmd = fun (caller,args) ->
-  let* actual_caller = Env.get_caller in
-  Env.require (Env.return (actual_caller = zwrapper)) >>
-  cmd (caller,args)
+  Env.code_set private_hkey begin fun (caller,args) ->
+    let* actual_caller = Env.get_caller in
+    let final_caller = if actual_caller = zwrap_proxy then caller else actual_caller in
+    cmd (final_caller,args)
+  end
 
-(* Macro: bind to `public_hkey` a call to `cmd` which is zprotected by a bounce
-   through zwrapper. *)
-let zwrap zwrapper public_hkey cmd =
-  let private_hkey = Env.code () in
-  Env.code_set public_hkey (zwrap_launch zwrapper private_hkey) >>
-  Env.code_set private_hkey (zwrap_receive zwrapper cmd)

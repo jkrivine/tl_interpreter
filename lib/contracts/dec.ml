@@ -19,32 +19,21 @@ type side = Left | Right
 
 module Ledger =
 struct
-  type t = {map : ((A.t * string * token),amount) MP.t ; z_crossings : int; z_nestings: int}
+  type t = {map : ((A.t * string * token),amount) MP.t ; zcrossings : int; zwrapping: bool}
 
   let solvent hk =
-    let* {z_crossings;_} = data_get hk in
-    return (z_crossings = 0)
+    let* {zcrossings;_} = data_get hk in
+    return (zcrossings = 0)
 
-  let z_nesting_incr hk =
-    data_update hk (fun l -> {l with z_nestings = l.z_nestings + 1})
+  let zwrap_start hk =
+    data_update hk (fun l -> {l with zwrapping = true})
 
-  let z_nesting_decr hk =
-    let* l = data_get hk in
-    let l' = {l with z_nestings = l.z_nestings - 1 } in
-    data_set hk l' >>
-    if l'.z_nestings = 0 then begin
-      let* is_solvent = solvent hk in
-      if is_solvent
-      then return ()
-      else error "ledger is not solvent"
-    end
-    else
-      return ()
-
-  let z_protect hk e =
-       z_nesting_incr hk
-    >> e
-    >> z_nesting_decr hk
+  let zwrap_end hk =
+    data_update hk (fun l -> {l with zwrapping = false}) >>
+    let* is_solvent = solvent hk in
+    if is_solvent
+    then return ()
+    else error "ledger is not solvent"
 
   let find hk k =
     let* l = data_get hk in
@@ -63,14 +52,12 @@ struct
   let add hk (who:A.t) ?(index="") (tk:token) (a:amount) =
     let* v = balance hk who ~index tk in
     data_update hk (fun l ->
-        let z = l.z_crossings in
+        let z = l.zcrossings in
         let modifier = if (a+v<0 && v>=0) then 1 else if (a+v>=0 && v<0) then (-1) else 0 in
-        {l with map = MP.set l.map (who,index,tk) (a+v);z_crossings = (z+modifier)})
+        {l with map = MP.set l.map (who,index,tk) (a+v);zcrossings = (z+modifier)})
 
   let transfer hk (giver:A.t) ?(index="") (tk:token) (a:amount) (taker:A.t) =
-    z_protect hk begin
-      add hk giver ~index tk (-a) >> add hk taker ~index tk a
-    end
+    add hk giver ~index tk (-a) >> add hk taker ~index tk a
 
   let transfer_up_to hk (giver:A.t) ?(index="") (tk:token) (a:amount) (taker:A.t) =
     let* b = balance hk giver ~index tk in
@@ -81,11 +68,11 @@ struct
     transfer hk giver ~index tk a taker
 
   let pp fmt l =
-    F.p fmt "(%d zcrossings, %d znestings)" l.z_crossings l.z_nestings;
+    F.p fmt "(%d zcrossings, zwrapping: %b)" l.zcrossings l.zwrapping;
     let printer fmt (addr,index,t) amount = F.cr (); F.p fmt "%a.%s has %d%a" A.pp addr index amount pp_token t in
     MP.pp_i fmt printer l.map
 
-  let empty = { map = MP.empty; z_crossings = 0; z_nestings = 0}
+  let empty = { map = MP.empty; zcrossings = 0; zwrapping = false}
 end
 
 (*  <key>    = data ~pp:<printing fn>     ~init:<init value> <display name> *)
@@ -139,46 +126,52 @@ let balance_of : (A.t * token, amount) code_hkey = code ()
 let balance_of_indexed : (A.t * string * token, amount) code_hkey = code ()
 (* Convenience composition of right_prov and get_balance *)
 let box_balance_of : (A.t * token, amount) code_hkey = code ()
-(* Obj.magic going on here *)
-(*let z_protect : (A.t * (unit,unit) code_hkey,unit) code_hkey = code ()*)
-let get_zwrapper : (unit,A.t) code_hkey = code ()
-let z_nesting_incr = code ()
-let z_nesting_decr  = code ()
+(* Zwrapping *)
+let get_zwrap_proxy : (unit,A.t) code_hkey = code ()
+let zwrap_start = code ()
+let zwrap_end  = code ()
+let is_zwrapping : (unit,bool) code_hkey = code ()
 
-
-module Zwrapper = struct
-  let dec_addr = data "dec_addr"
+module ZwrapProxy = struct
+  let dec_addr = data "dec"
   let construct dec =
     data_set dec_addr dec
   module Magic = struct
-    let call_zwrap zwrapper (caller,key,args) =
-      Env.proxy zwrapper ~caller (
+    (* Should be a command stored in an hkey *)
+    let call_zwrap zwrap_proxy (caller,key,args) =
+      Env.proxy zwrap_proxy ~caller (
         let* dec = data_get dec_addr in
-        call dec z_nesting_incr () >>
         let* caller' = get_caller in
-        call caller' key (caller,args) >>= fun ret ->
-        call dec z_nesting_decr () >>
-        return ret
+        call dec zwrap_start () >>
+        call caller' key (caller,args) >>= fun retval ->
+        call dec zwrap_end () >>
+        return retval
       )
   end
 end
 
 
 let construct =
-  (* Zprotect /  *)
+  (* Zwrapping /  *)
   let* this = get_this in
-  let* (zwrapper,()) =
-    create_contract "dec.zwrapper" (Zwrapper.construct this) in
-  let z_nesting_incr' () =
-    require (is_equal get_caller (callthis get_zwrapper ())) >>
-    Ledger.z_nesting_incr ledger
-  and z_nesting_decr' () =
-    require (is_equal get_caller (callthis get_zwrapper ())) >>
-    Ledger.z_nesting_decr ledger
+
+  let* (zwrap_proxy,()) =
+    create_contract "dec.zwrap_proxy" (ZwrapProxy.construct this) in
+
+  let zwrap_start' () =
+    Ledger.zwrap_start ledger
+
+  and zwrap_end' () =
+    let* caller = get_caller in
+    require (return (caller = zwrap_proxy)) >>
+    Ledger.zwrap_end ledger
   in
-  code_set get_zwrapper (fun () -> return zwrapper) >>
-  code_set z_nesting_incr z_nesting_incr' >>
-  code_set z_nesting_decr z_nesting_decr' >>
+  code_set get_zwrap_proxy (fun () -> return zwrap_proxy) >>
+  code_set zwrap_start zwrap_start' >>
+  code_set zwrap_end zwrap_end' >>
+  code_set is_zwrapping (fun () ->
+      let* {zwrapping;_} = data_get ledger in
+      return zwrapping) >>
 
   (* Dec *)
   let rec new_pos s =

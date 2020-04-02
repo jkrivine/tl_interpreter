@@ -7,15 +7,14 @@ module Loan = struct
 
   let construct dec ~time ~price:(tk,a) =
 
-    let* zwrapper = call dec Dec.get_zwrapper () in
-    Macro.zwrap zwrapper repay begin
+    Macro.zwrap dec repay begin
       fun (_caller,((source,_target) as parties)) ->
         let* source_owner = call dec Dec.owner_of source in
         call dec Dec.pay (parties,Dec.Right,tk,a,source_owner) >>
         call dec Dec.pull parties
     end >>
 
-    Macro.zwrap zwrapper seize begin fun (_caller,parties) ->
+    Macro.zwrap dec seize begin fun (_caller,parties) ->
         let* current_time = time_get in
         if current_time > time then
           call dec Dec.commit parties
