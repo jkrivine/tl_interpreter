@@ -1,3 +1,16 @@
+# 3/4/2020
+
+## Zcrossing for NFTs
+
+At the moment the only NFTs we handle are positions & boxes. In the future there will be arbitrary NFTs. Right we do not handle zcrossing for those: you are not able to give a position you don't have to someone, then successfully complete a transaction as long as that position is in your hands eventually. 
+
+Example (just a case of costless arbitrage applied to a position): suppose `A` wants `$20` for position `u`. And `B` would give `€20` for `u`. Assume `€:$` parity. `C` could 
+1. Arrive empty-handed.
+2. Flashtrade `u` against `€20` with `B`.
+3. Trade `€20` for `$20`.
+4. Trade `$20` for `u` with `A`.
+
+
 # 1/4/2020
 
 ## General note & question about zcrossing:
