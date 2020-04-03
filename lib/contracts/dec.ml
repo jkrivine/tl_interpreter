@@ -54,7 +54,12 @@ struct
     data_update hk (fun l ->
         let z = l.zcrossings in
         let modifier = if (a+v<0 && v>=0) then 1 else if (a+v>=0 && v<0) then (-1) else 0 in
-        {l with map = MP.set l.map (who,index,tk) (a+v);zcrossings = (z+modifier)})
+        {l with map = MP.set l.map (who,index,tk) (a+v);zcrossings = (z+modifier)}) >>
+    let* {zwrapping;_} = data_get hk in
+    let* is_solvent = solvent hk in
+    if zwrapping or is_solvent
+    then return ()
+    else error "ledger is not solvent"
 
   let transfer hk (giver:A.t) ?(index="") (tk:token) (a:amount) (taker:A.t) =
     add hk giver ~index tk (-a) >> add hk taker ~index tk a

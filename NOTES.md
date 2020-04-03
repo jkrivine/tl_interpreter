@@ -2,6 +2,8 @@
 
 ## General note & question about zcrossing:
 
+** (Implemented in commit 1618b9fdba9ca9d8aa136b) **
+
 All this nesting is at least doubling the call stack depth which is 1024 on
 ethereum (and 64 with gas restrictions?) It also consumes more gas to always
 bounce twice every time.
