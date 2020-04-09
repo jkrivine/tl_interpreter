@@ -47,7 +47,7 @@ module A = Address
 (* Macro: bind to `public_hkey` a call to `cmd` which is zprotected by a bounce
    through zwrap_proxy. *)
 let zwrap dec public_hkey cmd =
-  let* zwrap_proxy = call dec Dec.get_zwrap_proxy () in
+  let* zwrap_proxy = call dec Dec.Zwrap.get_proxy () in
 
   let private_hkey = Env.code () in
 
@@ -57,10 +57,10 @@ let zwrap dec public_hkey cmd =
 *)
   Env.code_set public_hkey begin fun args ->
     let* caller = Env.get_caller in
-    let* is_zwrapping = call dec Dec.is_zwrapping () in
+    let* is_zwrapping = call dec Dec.Zwrap.test () in
     if is_zwrapping
     then callthis private_hkey (caller,args)
-    else Dec.ZwrapProxy.Magic.call_zwrap zwrap_proxy (caller,private_hkey,args)
+    else Dec.Zwrap.Proxy.Magic.call_zwrap zwrap_proxy (caller,private_hkey,args)
   end >>
 
 (* Macro : run `cmd` on `args`. In addition, pass a `caller` argument to

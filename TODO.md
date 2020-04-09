@@ -1,13 +1,14 @@
 # TODO
+
+* write standard contracts eg loan, cds, etc
+* add notary
+* add token/NFT adapters
+* check "grow constraints" and multi-layer grow constraints
+
 ## Prettier-printing of tradelines
 
   - Simple line-based version, using Format for auto newlines
   - How to represent nested lines in text format?
-
-## Reimplement zcrossing
-how to do zcrossings? im thinking
-   * just a function you can delegatcall which does zcrossing (but is it safe)
-   * or a contract you can call which does zcrossing and is trusted by dec . you cannot call dec because you call it with code to proxy, that would be unsafe
 
 ## Implement Token-specific 'allowance' 
 instead of the current stub based on transfer callback

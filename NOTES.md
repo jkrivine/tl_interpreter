@@ -1,3 +1,15 @@
+# 8/4/20
+
+## On grow constraints, possible uses :
+* Rerepo: prevent any future grow which is not a rerepo of some kind
+* Prevent grow after block b
+* Prevent more than N grows
+* Force grow to trigger payment to TL originator (eg to prepay for backwards reduction gas)
+* Arbitrary "stop grow" global var, set by e.g. Dec itself
+
+## Spend some time thinking about clocks and contract triggering mechanisms
+
+
 # 3/4/2020
 
 ## Zcrossing for NFTs
