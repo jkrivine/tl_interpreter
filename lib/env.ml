@@ -235,8 +235,11 @@ let map_remove data_hkey k =
 let map_find data_hkey k =
   data_get data_hkey >>= fun map -> return (MP.find map k)
 
+let map_find_exns s data_hkey k =
+  map_find data_hkey k >>= function Some v -> return v | None -> error s
+
 let map_find_exn data_hkey k =
-  map_find data_hkey k >>= function Some v -> return v | None -> error "Not found"
+  map_find_exns "Not found" data_hkey k
 
 exception BadUpdate
 let map_update data_hkey k ?default f =

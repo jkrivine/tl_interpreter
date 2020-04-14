@@ -15,7 +15,7 @@ type token = A.t
 type pos = A.t
 [@@deriving show]
 
-(** Generic representation for choosing which side of a tradeline segment we're talking about. *)
+(** Generic representation for choosing which side of a tradeline pos/segment we're talking about. *)
 type side = Source | Target
 [@@deriving show]
 
@@ -24,11 +24,8 @@ type parties = pos*pos
 (*  <key>    = data ~pp:<printing fn>     ~init:<init value> <display name> *)
 let ledger   = data ~pp:Ledger.pp         ~init:Ledger.empty "ledger"
 let owners   = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "owners"
-let sources  = data ~pp:(SP.pp A.pp)      ~init:SP.empty     "sources"
 let nexts    = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "nexts"
 let segments = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "segments"
-let deads    = data ~pp:(SP.pp A.pp)      ~init:SP.empty     "deads"
-let boxes    = data ~pp:(MP.pp A.pp A.pp) ~init:MP.empty     "boxes"
 (* Positions have two 'boxes', a forward one and a backward one.
    The backward one is tied to the position itself. It cannot be detached.
    The forward one is called its 'box'.
@@ -55,6 +52,7 @@ module Admin = struct
 end
 
 module User = struct
+  let segment_of        : (A.t,A.t option) code_hkey = code ()
   (* Start a new tl with 2 positions *)
   let init_tl           : (string * string * A.t, A.t * A.t) code_hkey = code ()
   (* Transfers *)
@@ -62,8 +60,6 @@ module User = struct
   let collect_token     : (A.t * token, unit) code_hkey = code ()
   (* Give address1 owned by address2 to owner of address 2 *)
   let collect_address   : (A.t, unit) code_hkey = code ()
-  (* Detach box from pos and give it to pos owner. Argument is the pos *)
-  let collect_box       : (A.t, unit) code_hkey = code ()
   (* Transfer token amount from caller to address *)
   let transfer_token    : (token * amount * A.t, unit) code_hkey = code ()
   (* Transfer address from caller to address *)
@@ -75,31 +71,49 @@ module User = struct
   (* pos -> prov *)
   let box_of            : (A.t, A.t option) code_hkey = code ()
   (* any -> ... *)
+
   let balance_of        : (A.t * token, amount) code_hkey = code ()
   (* Convenience composition of right_prov and get_balance *)
+  (* convenience *)
   let box_balance_of    : (A.t * token, amount) code_hkey = code ()
   let fund_with_token   : (token * amount * pos * side,unit) code_hkey = code ()
   let fund_with_address : (A.t * pos * side,unit) code_hkey = code ()
 
   let new_pos s =
-    let* pos = create_user s in
-    let* box = create_user (s^".box") in
-    map_set boxes pos box >>
-    return pos
+    let* pos     = create_user s in
+    let* pos_box = create_user (s^".box") in
+    map_set nexts pos pos_box >>
+    return (pos,pos_box)
 
   let construct =
     (* Dec *)
 
+    (* get contract to left of pos, and to right of box *)
+    (* could be non for first pos, could be none for last box *)
+    code_set segment_of begin fun addr ->
+      map_find segments addr >>= function
+      | None ->
+        let* addr_box = map_find_exn nexts addr in
+        map_find segments addr_box
+      | Some _ ->
+        map_find nexts addr >>= function
+        | None -> return None
+        | Some pos ->
+          let* pos_box = map_find_exn nexts pos in
+          (* it would be invalid to return None here *)
+          map_find segments pos_box
+    end >>
+
+
     code_set init_tl
       begin fun (source_name,target_name,contract) ->
         let* owner = get_caller in
-        let* source = new_pos source_name in
-        let* target = new_pos target_name in
-        data_update sources (fun s -> SP.add s source) >>
+        let* (source,source_box) = new_pos source_name in
+        let* (target,target_box) = new_pos target_name in
         Admin.set_owner source owner >>
         Admin.set_owner target owner >>
-        map_set nexts source target >>
-        map_set segments source contract >>
+        map_set nexts source_box target >>
+        map_set segments target_box contract >>
         return (source,target)
       end >>
 
@@ -112,7 +126,6 @@ module User = struct
 
     code_set fund_with_token
       begin fun (token, amount, pos, side) ->
-        let* giver = get_caller in
         let* taker = match side with
           | Target -> return pos
           | Source ->
@@ -122,12 +135,17 @@ module User = struct
             | Some box ->
               return box
               (* use transfer_*_from to check that giver is owner of addr *)
-        in Admin.transfer_token_from giver token amount taker
+        in callthis transfer_token (token,amount,taker)
+      end >>
+
+    code_set transfer_address
+      begin fun (addr,taker) ->
+        let* giver = get_caller in
+        Admin.transfer_address_from giver addr taker
       end >>
 
     code_set fund_with_address
       begin fun (addr, pos, side) ->
-        let* giver = get_caller in
         let* taker = match side with
           | Target -> return pos
           | Source ->
@@ -135,58 +153,38 @@ module User = struct
             | None -> error "this pos has no box"
             | Some box -> return box
             (* use transfer_*_from to check that giver is owner of addr *)
-        in Admin.transfer_address_from giver addr taker
+        in callthis transfer_address (addr,taker)
       end >>
 
+    let test_collectable addr =
+      let* next_opt = map_find nexts addr in
+      let* segment_opt = map_find segments addr in
+      return ((next_opt = None) && (segment_opt = None)) in
+
     let require_collectable addr =
-      (* if not dead but has no box, then it _is_ a box *)
-      let* box_opt = map_find boxes addr in
-      let* source = data_get sources >>= fun s -> return (SP.mem s addr) in
-      let* dead = data_get deads >>= fun s -> return (SP.mem s addr) in
-      let* next = map_find nexts addr in
-      let not_pos = (not dead) && (box_opt = None) in
-      let singleton = source && next = None in
-      if not_pos || dead || singleton
+      let* collectable = test_collectable addr in
+      if collectable
       then return ()
       else error "Not collectable" in
 
     code_set collect_token
       begin fun (giver, tk) ->
         require_collectable giver >>
-        (* need to add pos to deads ?*)
         let* owner = map_find_exn owners giver in
         Ledger.transfer_all ledger giver tk owner
       end >>
 
-    (* addr's owner should be a pos or a box *)
     code_set collect_address
       begin fun addr ->
         let* giver = map_find_exn owners addr in
         require_collectable giver >>
-        (* need to add pos to deads ?*)
         let* taker = map_find_exn owners giver in
         Admin.transfer_address addr taker
-      end >>
-
-    code_set collect_box
-      begin fun giver ->
-        require_collectable giver >>
-        map_find boxes giver >>= function
-        | None ->
-          return ()
-        | Some b ->
-          let* owner = map_find_exn owners giver
-          in map_set owners b owner
       end >>
 
     code_set owner_of
       begin fun p ->
         map_find_exn owners p
-      end >>
-
-    code_set box_of
-      begin fun a ->
-        map_find boxes a
       end >>
 
     code_set balance_of
@@ -215,101 +213,65 @@ module Legal = struct
   let construct =
 
     let require_legal (source,target) =
-      let* caller = get_caller in
-      map_find segments source >>= (function
-          | Some segment_address ->
-            if segment_address <> caller
-            then error "caller is not segment of source"
-            else map_find nexts source >>= (function
-                | Some actual_target ->
-                  if actual_target <> target
-                  then error "target is not next of source"
-                  else return ()
-                | None -> error "No next for position source")
-          | None -> error "No segment for position source") in
+      let* source_box = map_find_exns "No box for source" nexts source in
+      let* target' = map_find_exns "No next for source box" nexts source_box in
+      if target <> target'
+      then error "target is not next of source box"
+      else
+        let* target_box = map_find_exns "No box for target" nexts target in
+        let* segment = map_find_exns "No segment for target_box" segments target_box in
+        let* caller = get_caller in
+        if segment <> caller
+        then error "caller is not segment of source"
+        else return () in
 
     code_set grow
       begin fun ((source,target),pos_name,owner,contract) ->
-        (* no need to check whether target is dead
-           since a dead pos is next of nobody *)
         require_legal (source,target) >>
-        map_find nexts target >>= function
+        let* target_box = map_find_exn nexts target in
+        map_find nexts target_box >>= function
         | Some _ ->
           error "Cannot grow a non-head of tradeline"
         | None ->
-          let* pos = User.new_pos pos_name in
+          let* (pos,pos_box) = User.new_pos pos_name in
           map_set owners pos owner >>
-          map_set nexts source pos >>
-          map_set segments source contract >>
+          map_set nexts target_box pos >>
+          map_set segments pos_box contract >>
           return pos
       end >>
-
-    (* given source,
-       if in position source---(segment)---target, return Some (segment,target)
-       if in position source---X, return None *)
-    let sell_side source =
-      let* target_opt = map_find nexts source in
-      let* segment_opt = map_find segments source in
-      match (target_opt,segment_opt) with
-      | Some target, Some segment -> return (Some (target,segment))
-      | None, None -> return None
-      | _,_ -> error "Dec inconsistency: pos has one of (next,segment) but not the other" in
 
     code_set pull
       begin fun (source,target) ->
         require_legal (source,target) >>
-        (sell_side target >>= function
-          | Some (new_target,_new_segment) ->
-            (* target itself has a target:
-               - connect source to new target, but keep segment *)
-            map_set nexts source new_target
+        let* source_box = map_find_exn nexts source in
+        let* target_box = map_find_exn nexts target in
+        let* segment = map_find_exn segments target_box in
+        (map_find nexts target_box >>= function
+          | Some new_target ->
+            let* new_target_box = map_find_exn nexts new_target in
+            map_set nexts source_box new_target >>
+            map_set segments new_target_box segment
           | None ->
-            (* target is the tradeline head:
-               - disconnect source from target *)
-            map_remove nexts source >>
-            (* - disconnect source from segment *)
-            map_remove segments source) >>
-        (* eject target from tradeline structure *)
+            map_remove nexts source) >>
         map_remove nexts target >>
-        map_remove segments target >>
-        (* mark target as dead *)
-        data_update deads (fun s -> SP.add s target)
-        (* no position ownership transfer *)
+        map_remove nexts target_box >>
+        map_remove segments target_box
       end >>
 
     code_set commit
       begin fun (source,target) ->
         require_legal (source,target) >>
-        (sell_side target >>= (function
-             | Some (new_target, new_segment) ->
-               (* target itself has a target:
-                  - connect source to new target *)
-               map_set nexts source new_target >>
-               (* - connect source to new segment *)
-               map_set segments source new_segment
-             | None ->
-               (* target is the tradeline head:
-                  - disconnect source from target *)
-               map_remove nexts source >>
-               (* - disconnect source from segment *)
-               map_remove segments source)) >>
-        (* eject target from tradeline strcture *)
+        let* source_box = map_find_exn nexts source in
+        let* target_box = map_find_exn nexts target in
+        (map_find segments source_box >>= function
+          | Some segment ->
+            map_set segments target_box segment >>
+            map_remove segments source_box
+          | None ->
+            map_remove segments target_box) >>
+        map_remove nexts source_box >>
         map_remove nexts target >>
-        map_remove segments target >>
-        let* source_owner = map_find_exn owners source in
-        let* source_box = map_find_exn boxes source in
-        let* target_owner = map_find_exn owners target in
-        let* target_box = map_find_exn boxes target in
-        (* box of v is now box of u *)
-        map_set boxes source target_box >>
-        (* remove box of v *)
-        map_remove boxes target >>
-        (* box of u has been replaced and is now orphaned, give it to source_owner *)
-        map_set owners source_box source_owner >>
-        (* mark target as dead, so target_owner can collect *)
-        data_update deads (fun s -> SP.add s target) >>
-        (* give source to owner of target *)
-        Admin.set_owner source target_owner
+        map_set nexts source target_box
       end >>
 
     code_set transfer_token
@@ -317,10 +279,10 @@ module Legal = struct
         require_legal parties >>
         match side with
         | Source ->
-          let* box = map_find_exn boxes source in
-          Admin.transfer_token_from box    tk amount taker
+          let* source_box = map_find_exn nexts source in
+          Admin.transfer_token_from source_box tk amount taker
         | Target ->
-          Admin.transfer_token_from target tk amount taker
+          Admin.transfer_token_from target     tk amount taker
       end >>
 
     code_set transfer_address
@@ -328,8 +290,8 @@ module Legal = struct
         require_legal parties >>
         match side with
         | Source ->
-          let* box = map_find_exn boxes source in
-          Admin.transfer_address_from box address taker
+          let* source_box = map_find_exn nexts source in
+          Admin.transfer_address_from source_box address taker
         | Target ->
           Admin.transfer_address_from target address taker
       end
@@ -408,8 +370,5 @@ let construct =
 let echo_dec =
   echo_data ledger >>
   echo_data owners >>
-  echo_data sources >>
   echo_data nexts >>
-  echo_data segments >>
-  echo_data deads >>
-  echo_data boxes
+  echo_data segments

@@ -17,13 +17,6 @@ val pp_pos : Format.formatter -> pos -> unit
 type side = Source | Target
 [@@deriving show]
 
-val ledger    : Ledger.t data_hkey
-val owners    : (A.t,A.t) MP.t data_hkey
-val sources   : pos SP.t data_hkey
-val nexts     : (pos,pos) MP.t data_hkey
-val segments  : (pos,Address.t) MP.t data_hkey
-val deads     : pos SP.t data_hkey 
-
 type parties = A.t*A.t
 
 module Legal : sig
@@ -58,7 +51,6 @@ module User : sig
   (* Transfers *)
   val collect_token    : (A.t * token, unit) code_hkey
   val collect_address  : (A.t, unit) code_hkey
-  val collect_box      : (A.t, unit) code_hkey
   val transfer_token   : (token * amount * A.t, unit) code_hkey
   val transfer_address : (A.t * A.t, unit) code_hkey
   (* UNSAFE *)

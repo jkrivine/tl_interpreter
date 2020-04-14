@@ -108,6 +108,7 @@ val map_remove : ('a,'b) MP.t data_hkey -> 'a -> unit st
 (* Consider [hkey] as some [map]'s name. Get the value of [k] in [map] *)
 val map_find : ('a,'b) MP.t data_hkey -> 'a -> 'b option st
 
+val map_find_exns : string -> ('a,'b) MP.t data_hkey -> 'a -> 'b st
 val map_find_exn : ('a,'b) MP.t data_hkey -> 'a -> 'b st
 
 exception BadUpdate
