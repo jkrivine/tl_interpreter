@@ -7,14 +7,14 @@ module Loan = struct
 
   let construct dec ~time ~price:(tk,a) =
 
-    Macro.zwrap dec repay begin
-      fun (_caller,((source,_target) as parties)) ->
+    code_set repay begin
+      fun ((source,_target) as parties) ->
         let* source_owner = call dec Dec.User.owner_of source in
         call dec Dec.Legal.transfer_token (parties,Dec.Target,tk,a,source_owner) >>
         call dec Dec.Legal.pull parties
     end >>
 
-    Macro.zwrap dec seize begin fun (_caller,parties) ->
+    code_set seize begin fun parties ->
         let* current_time = time_get in
         if current_time > time then
           call dec Dec.Legal.commit parties
