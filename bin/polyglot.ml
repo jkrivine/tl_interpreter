@@ -1,4 +1,4 @@
-open Env
+open Monadic.P
 
 module Auth = struct
   type 'a response = Authorized of 'a | Forbidden
@@ -32,7 +32,7 @@ module PermissionedCounter = struct
   let read = code ()
   let addread = code ()
 
-  let construct owner initial_value =
+  let construct (owner,initial_value) =
     data_private initial_value >>= fun counter ->
     import (Auth.construct owner) >>= fun _change_owner ->
     code_set add (fun y -> callthis Auth.check () >>= function
@@ -46,15 +46,15 @@ end
 
 let say_hi = code ()
 
-let polyglot_construct =
+let polyglot_construct () =
   code_set say_hi (fun () -> return (List.nth ["Hello";"Hola";"Bonjour"] (Random.int 3)))
 
 module MyContract = struct
   let say_hello_and_count = code ()
   let construct speaker_address =
     get_this >>= fun this ->
-    create_contract "permissioned_counter" (PermissionedCounter.construct this 0) >>=
-    fun (counter_address,_change_counter_owner) ->
+    create_contract "permissioned_counter" PermissionedCounter.construct (this,0) >>=
+    fun counter_address ->
     code_set say_hello_and_count (fun () ->
         call counter_address PermissionedCounter.add 1 >>
         let* text = call speaker_address say_hi () in
@@ -72,10 +72,11 @@ end
 
 (* begin calls *)
 
+open Monadic.C
 let () = ignore(execute(
 let* userA = create_user "uA" in
-let* polyglot_address = tx_create userA "polyglot" polyglot_construct in
-let* my_contract_address = tx_create userA "myc" (MyContract.construct polyglot_address) in
+let* polyglot_address = tx_create userA "polyglot" polyglot_construct () in
+let* my_contract_address = tx_create userA "myc" MyContract.construct polyglot_address in
 let* _response = tx userA my_contract_address MyContract.say_hello_and_count () in
 return ()))
 

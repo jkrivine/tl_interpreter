@@ -1,4 +1,4 @@
-open Env
+open Imperative.P
 module A = Address
 (* The following implements bouncing through `dec` to surround a call with
    z-crossing parentheses.  We cheat a little because here in OCaml we must
@@ -47,28 +47,28 @@ module A = Address
 (* Macro: bind to `public_hkey` a call to `cmd` which is zprotected by a bounce
    through zwrap_proxy. *)
 let zwrap dec public_hkey cmd =
-  let* zwrap_proxy = call dec Dec.Zwrap.get_proxy () in
+  let zwrap_proxy = call dec Dec.Zwrap.get_proxy () in
 
-  let private_hkey = Env.code () in
+  let private_hkey = code () in
 
-(* Macro: Ask `zwrap_proxy` to call a zprotected
-   version of `private_hkey and pass along the current `caller`. `private_hkey`
-   will be called at the current `this`.
-*)
-  Env.code_set public_hkey begin fun args ->
-    let* caller = Env.get_caller in
-    let* is_zwrapping = call dec Dec.Zwrap.test () in
-    if is_zwrapping
-    then callthis private_hkey (caller,args)
-    else Dec.Zwrap.Proxy.Magic.call_zwrap zwrap_proxy (caller,private_hkey,args)
-  end >>
+  (* Macro: Ask `zwrap_proxy` to call a zprotected
+     version of `private_hkey and pass along the current `caller`. `private_hkey`
+     will be called at the current `this`.
+  *)
+  code_set public_hkey (fun args ->
+      let caller = get_caller () in
+      let is_zwrapping = call dec Dec.Zwrap.test () in
+      if is_zwrapping
+      then callthis private_hkey (caller,args)
+      else Dec.Zwrap.Proxy.Magic.call_zwrap zwrap_proxy (caller,private_hkey,args)
+    );
 
-(* Macro : run `cmd` on `args`. In addition, pass a `caller` argument to
-   `cmd` which is supposed to be the caller before bouncing. It can be trusted.
-*)
-  Env.code_set private_hkey begin fun (caller,args) ->
-    let* actual_caller = Env.get_caller in
-    let final_caller = if actual_caller = zwrap_proxy then caller else actual_caller in
-    cmd (final_caller,args)
-  end
+  (* Macro : run `cmd` on `args`. In addition, pass a `caller` argument to
+     `cmd` which is supposed to be the caller before bouncing. It can be trusted.
+  *)
+  code_set private_hkey (fun (caller,args) ->
+      let actual_caller = get_caller () in
+      let final_caller = if actual_caller = zwrap_proxy then caller else actual_caller in
+      cmd (final_caller,args)
+    )
 

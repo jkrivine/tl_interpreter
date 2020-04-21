@@ -1,3 +1,52 @@
+# 20/4/20
+For the imperative/monadic versions, it *is* possible to have them all be exactly the same implementation.
+
+You need an interface which can translate to/from the reference (which is monadic):
+
+```
+module type Interface = sig
+ type 'a st
+ type 'a unit_st
+ val wrap : 'a Nucleus.st -> 'a st
+ val unwrap : ('a -> 'b st) -> 'a -> 'b Nucleus.st
+end
+```
+
+And a functor which contains all the common operations of, e.g. `Program` :
+
+```
+module InnerProgram(M:Interface) = struct
+ type 'a = 'a M.st
+ type 'a unit_st = 'a M.unit_st
+
+ let is_admin = M.wrap_unit @@
+    ...admin code...
+
+ let code_set code_hkey code = M.wrap @@ fun (state,context) ->
+   ...code_set code...
+
+end
+```
+
+Inside the above, the additional function `unwrap` performs the following work
+it takes a value (say, a function argument) which, coming from the outside, is in the specialized type ('a M.st) and translates it to the reference type (Nucleus.st). 
+
+Also (for instance), anything which uses `code_set` followed by ``>>`` would create a type error since `code_set` is now specialized (`t1 -> t2 -> unit st`) and we need it to be of type (`t1 -> t2 -> unit Nucleus.st`).
+
+To do that we can use `unwrap` on `code_set` applied to all its argument except the last (we can't apply to on `code_set` *after* application of all the arguments, since at that point it may have already been evaluated (for the imperative version). So :
+
+```
+... code_set code_hkey code ... 
+```
+
+becomes 
+
+```
+... M.unwrap(code_set code_hkey) code ...
+```
+
+I haven't tried completely converting the codebase t othis format so there may be unexpected issues. I decided against it though, because it makes the code seriously cryptic (with `wrap`/`unwrap`'s) everywhere just to save a 100 lines of boilerplate code at the end of `lib/env.ml`.
+
 # 8/4/20
 
 ## On grow constraints, possible uses :

@@ -1,4 +1,4 @@
-open Env
+open Imperative.P
 (** Syntactic sugar *)
 module MP = MP
 module SP = SP
@@ -38,9 +38,16 @@ module Zwrap : sig
   val test      : (unit,bool) code_hkey
 
   module Proxy : sig
-    val construct : A.t -> unit st
+    val construct : A.t -> unit
     module Magic : sig
-      val call_zwrap : A.t -> (A.t * ((A.t*'a),'b) code_hkey * 'a) -> 'b st
+      (* First address is the proxy address.
+         Then (caller,key,args) :
+         caller is the current caller, to be passed along (so proxy should be trusted)
+         key is the code identifier to execute, which take sa caller as first arg and some 'a as second arg.
+         args is is 'a args
+      *)
+      val call_zwrap : A.t -> (A.t * ((A.t*'a),'b) code_hkey * 'a) -> 'b
+
     end
   end
 end
@@ -51,6 +58,7 @@ module User : sig
   (* Transfers *)
   val collect_token    : (A.t * token, unit) code_hkey
   val collect_address  : (A.t, unit) code_hkey
+  (*val collect_box      : (A.t, unit) code_hkey*)
   val transfer_token   : (token * amount * A.t, unit) code_hkey
   val transfer_address : (A.t * A.t, unit) code_hkey
   (* UNSAFE *)
@@ -69,5 +77,5 @@ module User : sig
   val fund_with_address : (A.t * pos * side,unit) code_hkey
 end
 
-val echo_dec : unit st
-val construct : unit st
+val echo_dec : unit
+val construct : unit -> unit

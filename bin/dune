@@ -2,7 +2,10 @@
  (libraries lib)
  (names 
   loan 
+  example0
   example1 
+  example1_imp
   example2 
   polyglot
- ))
+ )
+(modes byte exe))

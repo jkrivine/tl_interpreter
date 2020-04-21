@@ -4,4 +4,5 @@
  (name lib)
  (public_name lib)
  (wrapped false)
+ (modules_without_implementation c)
  (preprocess (pps ppx_deriving.show)))
