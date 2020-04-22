@@ -1,5 +1,4 @@
-open Monadic
-
+open Imperative
 (* We define an onchain contract. All public data and code are members of the
    module structure.
 
@@ -40,7 +39,7 @@ module Contract = struct
   (* `construct` is just a generic name for the constructor. New instances of
      the contract should be created by calling construct *)
   let construct () =
-    P.data_set counter 0 >>
+    P.data_set counter 0 ;
     (* the following code will be executed in an environment with
        * a current, global chain state
        * an execution context, which includes the current address
@@ -51,59 +50,63 @@ module Contract = struct
 
     (* For instance here, we bind a function which updates the int associated
        with the `counter` identifier to the `incr` identifier. *)
-    P.code_set incr begin fun () ->
-      P.data_update counter (fun c -> c+1)
-    end >>
+    P.code_set incr begin
+      fun () ->
+        P.data_update counter (fun c -> c+1)
+    end;
 
     (* Note the `>>` which acts as a semicolon between statements. *)
 
-    P.code_set decr begin fun () ->
-      P.data_update counter (fun c -> c-1)
-    end >>
+    P.code_set decr begin
+      fun () ->
+        P.data_update counter (fun c -> c-1)
+    end;
 
     P.code_set hello begin fun () ->
-      (* echo is the within-blockchain version of 'print' *)
-      P.echo "Hello from Contract"
+        (* echo is the within-blockchain version of 'print' *)
+        P.echo "Hello from Contract"
     end
 end
 
-let () = ignore ( C.execute (
-    (* The following creates a new user. Technically it takes a new address and
-       sets its code and storage to "nothing". *)
 
-    (* The `let*` is syntactic sugar. Blockchain commands expect an environment
+
+let () =
+  (* The following creates a new user. Technically it takes a new address and
+     sets its code and storage to "nothing". *)
+
+  (* The `let*` is syntactic sugar. Blockchain commands expect an environment
        to be executed; they may return values. The `let*` binds the future
        return value of the command to a variable name. *)
-    let* userA = P.create_user "userA" in
+  let userA = P.create_user "userA" in
 
-    (* userA creates two instances of `Contract`. `tx_create` takes an
-       originating address, an instance name (a string) and a command. The
-       command is executed under a fresh address with special permissions (it
-       can bind code to storage addresses); that fresh address is returned for
-       convenience. *)
-    let* c  = C.tx_create userA "c"  Contract.construct () in
-    let* c' = C.tx_create userA "c'" Contract.construct () in
+  (* userA creates two instances of `Contract`. `tx_create` takes an
+     originating address, an instance name (a string) and a command. The
+     command is executed under a fresh address with special permissions (it
+     can bind code to storage addresses); that fresh address is returned for
+     convenience. *)
+  let c  = C.tx_create userA "c"  Contract.construct () in
+  let c' = C.tx_create userA "c'" Contract.construct () in
 
-    (* `tx` initiates a normal transaction. It takes an originating address, a
-       contract address, an identifier and appropriate arguments *)
-    C.tx userA c Contract.incr () >>
+  (* `tx` initiates a normal transaction. It takes an originating address, a
+     contract address, an identifier and appropriate arguments *)
+  C.tx userA c Contract.incr ();
 
-    (* `echo_env` pretty-prints the current state (global storage) and calling context.
-       The commands `echo_state` and `echo_context` are also avialable. *)
-    C.echo_env >>
+  (* `echo_env` pretty-prints the current state (global storage) and calling context.
+     The commands `echo_state` and `echo_context` are also avialable. *)
+  C.echo_env ();
 
-    (* Note that the same identifier is given to two different instances of the
-       contract. Similarly, in solidity, a same function digest can be used to
-       call two different addresses *)
-    C.tx userA c  Contract.incr () >>
-    C.tx userA c' Contract.decr () >>
+  (* Note that the same identifier is given to two different instances of the
+     contract. Similarly, in solidity, a same function digest can be used to
+     call two different addresses *)
+  C.tx userA c  Contract.incr ();
+  C.tx userA c' Contract.decr ();
 
-    (* When `echo` is called from within a contract, the terminal will show
-       where the printing emanated from with a prefix of the form
-       ⦃ address_name ⦄ ⇒ ...
-    *)
-    C.echo_env >>
+  (* When `echo` is called from within a contract, the terminal will show
+     where the printing emanated from with a prefix of the form
+     ⦃ address_name ⦄ ⇒ ...
+  *)
+  C.echo_env ();
 
-    C.tx userA c  Contract.hello () >>
-    C.tx userA c' Contract.hello ()
-  ))
+  C.tx userA c  Contract.hello ();
+  C.tx userA c' Contract.hello ()
+
