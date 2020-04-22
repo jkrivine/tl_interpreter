@@ -3,7 +3,7 @@ open Monadic.P
 module Auth = struct
   type 'a response = Authorized of 'a | Forbidden
   let check = code ()
-  let change_owner : (unit,unit) code_hkey = code ()
+  let change_owner : (unit,unit) code_identifier = code ()
   (* functions defined here are [public], in solidity terms *)
   (* we don't do [external] (only from outside) *)
   (* [internal] (only from self and inheriting contracts)  can be returned from the construct *)
@@ -63,8 +63,8 @@ module MyContract = struct
 end
 
 module Virtual = struct
-  let value : int data_hkey = data "value"
-  let act : (int,unit) code_hkey = code ()
+  let value : int data_identifier = data "value"
+  let act : (int,unit) code_identifier = code ()
   let construct act_code =
     code_set act (act_code value) >>
     return (data_get value)

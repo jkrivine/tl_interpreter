@@ -5,8 +5,8 @@ module Nucleus : sig
   (*type env*)
 
   type 'a st
-  type ('a,'b) code_hkey
-  type 'a data_hkey
+  type ('a,'b) code_identifier
+  type 'a data_identifier
 
   (*val empty_state : state*)
 
@@ -26,8 +26,8 @@ end
 module Program : C.Program
   with type 'a st = 'a Nucleus.st 
    and type 'a unit_st = 'a Nucleus.st
-   and type ('a,'b) code_hkey = ('a,'b) Nucleus.code_hkey
-   and type 'a data_hkey = 'a Nucleus.data_hkey
+   and type ('a,'b) code_identifier = ('a,'b) Nucleus.code_identifier
+   and type 'a data_identifier = 'a Nucleus.data_identifier
 
 module Chain : sig
   (* Run an instruction sequence on a starting environment *)
@@ -37,24 +37,24 @@ module Chain : sig
   include C.Chain
     with type 'a st = 'a Nucleus.st 
      and type 'a unit_st = 'a Nucleus.st
-     and type ('a,'b) code_hkey = ('a,'b) Nucleus.code_hkey
-     and type 'a data_hkey = 'a Nucleus.data_hkey
+     and type ('a,'b) code_identifier = ('a,'b) Nucleus.code_identifier
+     and type 'a data_identifier = 'a Nucleus.data_identifier
 end
 
 module Imp : sig
   module Program : C.Program
     with type 'a st := 'a 
      and type 'a unit_st := unit -> 'a
-     and type ('a,'b) code_hkey = ('a,'b) Nucleus.code_hkey
-     and type 'a data_hkey = 'a Nucleus.data_hkey
+     and type ('a,'b) code_identifier = ('a,'b) Nucleus.code_identifier
+     and type 'a data_identifier = 'a Nucleus.data_identifier
 
   module Chain : sig
     val initialize_chain : unit -> unit
     include C.Chain
       with type 'a st := 'a 
        and type 'a unit_st := unit -> 'a
-       and type ('a,'b) code_hkey = ('a,'b) Nucleus.code_hkey
-       and type 'a data_hkey = 'a Nucleus.data_hkey
+       and type ('a,'b) code_identifier = ('a,'b) Nucleus.code_identifier
+       and type 'a data_identifier = 'a Nucleus.data_identifier
   end
 
 end

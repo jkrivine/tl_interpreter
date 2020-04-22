@@ -10,7 +10,7 @@ let transfer_all = code ()
 let mint_for = code ()
 
 (* Also an external callback for others *)
-let on_token_receive : (Address.t*Address.t*int,unit) code_hkey = code ()
+let on_token_receive : (Address.t*Address.t*int,unit) code_identifier = code ()
 
 let construct () =
 

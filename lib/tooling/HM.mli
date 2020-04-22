@@ -2,7 +2,7 @@
  * Hmap-related stuff
  *)
 
-(* Type of the information contained in an hkey *)
+(* Type of the information contained in an identifier *)
 type 'a key_info = {
   name: string;
   pp: (Format.formatter -> 'a -> unit) option;

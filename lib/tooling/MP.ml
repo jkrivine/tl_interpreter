@@ -25,7 +25,7 @@ let pp fmt_k fmt_d fmt m =
     (*F.with_indent (fun () ->*)
     M.iteri m ~f:(fun ~key ~data ->
         F.cr ();
-        F.p fmt "%a ᐅ " fmt_k key;
+        F.p fmt "%a: " fmt_k key;(* ᐅ *)
         F.with_indent (fun () -> F.p fmt "%a" fmt_d data);
         )
   end

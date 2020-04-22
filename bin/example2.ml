@@ -35,7 +35,7 @@ module C1 = struct
         P.data_set phrase new_phrase_str
     end >>
 
-    (* Here, the `auth_code` given in argument is bound to the hkey
+    (* Here, the `auth_code` given in argument is bound to the identifier
        `check_authorized`. This binding is only valid in the address where this
        code is currently being executed. *)
     P.code_set check_authorized auth_code

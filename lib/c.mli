@@ -1,8 +1,8 @@
 module type Monad = sig
   type 'a st
   type 'a unit_st
-  type ('a,'b) code_hkey
-  type 'a data_hkey
+  type ('a,'b) code_identifier
+  type 'a data_identifier
 
   val bind  : 'a st -> ('a -> 'b st) -> 'b st
   val (>>=) : 'a st -> ('a -> 'b st) -> 'b st
@@ -16,8 +16,8 @@ end
 module type Echo = sig
   type 'a st
   type 'a unit_st
-  type ('a,'b) code_hkey
-  type 'a data_hkey
+  type ('a,'b) code_identifier
+  type 'a data_identifier
 (*
  * 'echo' is printing from within the execution
  *)
@@ -26,7 +26,7 @@ module type Echo = sig
   (* (state,context) arg important for evaluation time of F.p functions *)
   val echo : string -> unit st
 
-  val echo_data : 'a data_hkey -> unit st
+  val echo_data : 'a data_identifier -> unit st
 
   (* Echo the current state *)
   val echo_state : unit unit_st
@@ -41,48 +41,48 @@ end
 module type Program = sig
   include Monad
   (* Initialize a new key for code *)
-  val code : unit -> ('a,'b) code_hkey
+  val code : unit -> ('a,'b) code_identifier
 
-  val code_set : ('a,'b) code_hkey -> ('a -> 'b st) -> unit st
+  val code_set : ('a,'b) code_identifier -> ('a -> 'b st) -> unit st
 
-  val code_private : ('a -> 'b st) -> ('a,'b) code_hkey st
+  val code_private : ('a -> 'b st) -> ('a,'b) code_identifier st
 
 
   (* Initialize a new key for data *)
-  val data : ?pp:(Format.formatter -> 'a -> unit) -> string -> 'a data_hkey
+  val data : ?pp:(Format.formatter -> 'a -> unit) -> string -> 'a data_identifier
   (* Initialize a new key which will not show when printing current stat e*)
-  (*val data_hidden : ?init:'a -> unit -> 'a data_hkey*)
+  (*val data_hidden : ?init:'a -> unit -> 'a data_identifier*)
 
-  val data_set : 'a data_hkey -> 'a -> unit st
+  val data_set : 'a data_identifier -> 'a -> unit st
 
-  val data_get : 'a data_hkey -> 'a st
+  val data_get : 'a data_identifier -> 'a st
 
   (* Simple read-and-write convenience *)
-  val data_update : 'a data_hkey -> ('a -> 'a) -> unit st
+  val data_update : 'a data_identifier -> ('a -> 'a) -> unit st
 
   (* Convenience: define data that will only be visible to
      - constructor methods
      - any inheriting contract if the key is returned by the constructor
   *)
-  val data_private : 'a -> 'a data_hkey st
+  val data_private : 'a -> 'a data_identifier st
 
 (*
  * Map-specific convenience functions
  *)
 
-  (* Consider [hkey] as some [map]'s name. Set the value of [k] in [map] to [v] *)
-  val map_set : ('a,'b) MP.t data_hkey -> 'a -> 'b -> unit st
+  (* Consider [identifier] as some [map]'s name. Set the value of [k] in [map] to [v] *)
+  val map_set : ('a,'b) MP.t data_identifier -> 'a -> 'b -> unit st
 
-  val map_remove : ('a,'b) MP.t data_hkey -> 'a -> unit st
+  val map_remove : ('a,'b) MP.t data_identifier -> 'a -> unit st
 
-  (* Consider [hkey] as some [map]'s name. Get the value of [k] in [map] *)
-  val map_find : ('a,'b) MP.t data_hkey -> 'a -> 'b option st
+  (* Consider [identifier] as some [map]'s name. Get the value of [k] in [map] *)
+  val map_find : ('a,'b) MP.t data_identifier -> 'a -> 'b option st
 
-  val map_find_exns : string -> ('a,'b) MP.t data_hkey -> 'a -> 'b st
-  val map_find_exn : ('a,'b) MP.t data_hkey -> 'a -> 'b st
+  val map_find_exns : string -> ('a,'b) MP.t data_identifier -> 'a -> 'b st
+  val map_find_exn : ('a,'b) MP.t data_identifier -> 'a -> 'b st
 
   exception BadUpdate
-  val map_update : ('a,'b) MP.t data_hkey -> 'a -> ?default:'b -> ('b -> 'b) -> unit st
+  val map_update : ('a,'b) MP.t data_identifier -> 'a -> ?default:'b -> ('b -> 'b) -> unit st
 
   (* Admin-only stuff *)
   (* Execution at the 'root' is from the admin address.
@@ -103,14 +103,14 @@ module type Program = sig
   val create_empty_contract : string -> Address.t st
   val create_user : string -> Address.t st
 
-  (* Get the code given by `code_hkey` at `address`, run it at `address` *)
-  val call : Address.t -> ('a,'b) code_hkey -> 'a -> 'b st
+  (* Get the code given by `code_identifier` at `address`, run it at `address` *)
+  val call : Address.t -> ('a,'b) code_identifier -> 'a -> 'b st
 
-  (* Get the code given by `code_hkey` at `address` but run it in the current context *)
-  val delegatecall : Address.t -> ('a,'b) code_hkey -> 'a -> 'b st
+  (* Get the code given by `code_identifier` at `address` but run it in the current context *)
+  val delegatecall : Address.t -> ('a,'b) code_identifier -> 'a -> 'b st
 
   (* Convenience, do a call at current address *)
-  val callthis : ('a,'b) code_hkey -> 'a -> 'b st
+  val callthis : ('a,'b) code_identifier -> 'a -> 'b st
 
   (* Check boolean value, throw if false *)
   val require : bool st -> unit st
@@ -123,7 +123,7 @@ module type Program = sig
   val import : 'a unit_st -> 'a st
 
   (* Check if a contract has an entry for key `k` *)
-  val if_responds : Address.t -> ('a,'b) code_hkey -> 'a -> 'b option st
+  val if_responds : Address.t -> ('a,'b) code_identifier -> 'a -> 'b option st
 
   (* Time stuff, some of it admin-only *)
   val time_get : int unit_st
@@ -132,8 +132,8 @@ module type Program = sig
 
   include Echo with type 'a st := 'a st
                 and type 'a unit_st := 'a unit_st
-                and type ('a,'b) code_hkey := ('a,'b) code_hkey
-                and type 'a data_hkey := 'a data_hkey
+                and type ('a,'b) code_identifier := ('a,'b) code_identifier
+                and type 'a data_identifier := 'a data_identifier
 end
 
 module type Chain = sig
@@ -141,10 +141,10 @@ module type Chain = sig
 
 
   (* User sends a transactions. Ignore return value. Revert to previous state in case of error. *)
-  val tx : Address.t -> Address.t -> ('a,'b) code_hkey -> 'a -> unit st
+  val tx : Address.t -> Address.t -> ('a,'b) code_identifier -> 'a -> unit st
 
   (* User sends a transactions. Pass along return value. Bubble up an exception in case of error. *)
-  val tx_with_return : Address.t -> Address.t -> ('a,'b) code_hkey -> 'a -> 'b st
+  val tx_with_return : Address.t -> Address.t -> ('a,'b) code_identifier -> 'a -> 'b st
 
   (* User sends a contract creation transaction *)
   (* In ethereum, this is just a normal tx but with address 0 as destination *)
@@ -163,6 +163,6 @@ module type Chain = sig
 
   include Echo with type 'a st := 'a st
                 and type 'a unit_st := 'a unit_st
-                and type ('a,'b) code_hkey := ('a,'b) code_hkey
-                and type 'a data_hkey := 'a data_hkey
+                and type ('a,'b) code_identifier := ('a,'b) code_identifier
+                and type 'a data_identifier := 'a data_identifier
 end

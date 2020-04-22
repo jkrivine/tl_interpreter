@@ -38,8 +38,8 @@ module Nucleus = struct
     }
     type env = state*context
     type 'a st = env -> ( ('a,(string*context)) result * state )
-    type ('a,'b) code_hkey = ('a -> 'b st) HM.key
-    type 'a data_hkey = 'a HM.key
+    type ('a,'b) code_identifier = ('a -> 'b st) HM.key
+    type 'a data_identifier = 'a HM.key
   end
 
   include Types
@@ -47,8 +47,8 @@ module Nucleus = struct
   module Monad = struct
     type 'a st = 'a Types.st
     type 'a unit_st = 'a Types.st
-    type ('a,'b) code_hkey = ('a,'b) Types.code_hkey
-    type 'a data_hkey = 'a Types.data_hkey
+    type ('a,'b) code_identifier = ('a,'b) Types.code_identifier
+    type 'a data_identifier = 'a Types.data_identifier
 
     let bind t1 t2 =
       fun (s,c) -> match t1 (s,c) with
@@ -145,23 +145,23 @@ module Nucleus = struct
     (Ok (),{state with hmaps=hmaps'})
 
 
-  (* Get value associated with [hkey] in this context's hmap *)
+  (* Get value associated with [identifier] in this context's hmap *)
   (* Direct access version *)
-  let _get_in_hmap_option hkey address hmaps = HM.find hkey (_get_hmap address hmaps)
+  let _get_in_hmap_option identifier address hmaps = HM.find identifier (_get_hmap address hmaps)
 
-  let get_in_hmap_option hkey (state,context) =
-    (Ok (_get_in_hmap_option hkey context.this state.hmaps), state)
+  let get_in_hmap_option identifier (state,context) =
+    (Ok (_get_in_hmap_option identifier context.this state.hmaps), state)
 
-  (* Get value associated with [hkey] in this context's hmap *)
-  let get_in_hmap hkey =
-    get_in_hmap_option hkey >>= function
+  (* Get value associated with [identifier] in this context's hmap *)
+  let get_in_hmap identifier =
+    get_in_hmap_option identifier >>= function
     | Some v -> return v
-    | None -> error "No such hkey"
+    | None -> error "No such identifier"
 
-  (* Set value associated with [hkey] in this context's hmap *)
-  let set_in_hmap hkey v =
+  (* Set value associated with [identifier] in this context's hmap *)
+  let set_in_hmap identifier v =
     get_hmap >>= fun hmap ->
-    let hmap' = HM.add hkey v hmap in
+    let hmap' = HM.add identifier v hmap in
     set_hmap hmap'
 
 
@@ -193,11 +193,11 @@ module Program = struct
   (* Initialize a new key for code *)
   let code () = HM.Key.create {name="<code>";pp=None;hidden=true}
 
-  let code_set code_hkey code (state,context) =
+  let code_set code_identifier code (state,context) =
     if context.constructor then
-      (get_in_hmap_option code_hkey >>= function
-        | Some _ -> error "Code already set at this hkey"
-        | None -> set_in_hmap code_hkey code ) (state,context)
+      (get_in_hmap_option code_identifier >>= function
+        | Some _ -> error "Code already set at this identifier"
+        | None -> set_in_hmap code_identifier code ) (state,context)
     else
       (Error ("Cannot set code outside of constructor",context), state)
 
@@ -210,14 +210,14 @@ module Program = struct
   let data ?pp name = HM.Key.create {name;pp;hidden=false}
   let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true}
 
-  let data_set (data_hkey: 'a data_hkey) (v:'a) = set_in_hmap data_hkey v
+  let data_set (data_identifier: 'a data_identifier) (v:'a) = set_in_hmap data_identifier v
 
-  let data_get data_hkey = get_in_hmap data_hkey
+  let data_get data_identifier = get_in_hmap data_identifier
 
   (* Simple read-and-write convenience *)
-  let data_update data_hkey f =
-    let* v = data_get data_hkey in
-    set_in_hmap data_hkey (f v)
+  let data_update data_identifier f =
+    let* v = data_get data_identifier in
+    set_in_hmap data_identifier (f v)
 
   (* Convenience: define data that will only be visible to
      - constructor methods
@@ -234,27 +234,27 @@ module Program = struct
  * Map-specific convenience functions
  *)
 
-  (* Consider [hkey] as some [map]'s name. Set the value of [k] in [map] to [v] *)
-  let map_set data_hkey k v =
-    data_update data_hkey (fun m -> MP.set m k v)
+  (* Consider [identifier] as some [map]'s name. Set the value of [k] in [map] to [v] *)
+  let map_set data_identifier k v =
+    data_update data_identifier (fun m -> MP.set m k v)
 
-  let map_remove data_hkey k =
-    data_update data_hkey (fun m -> MP.remove m k)
+  let map_remove data_identifier k =
+    data_update data_identifier (fun m -> MP.remove m k)
 
-  (* Consider [hkey] as some [map]'s name. Get the value of [k] in [map] *)
-  let map_find data_hkey k =
-    data_get data_hkey >>= fun map -> return (MP.find map k)
+  (* Consider [identifier] as some [map]'s name. Get the value of [k] in [map] *)
+  let map_find data_identifier k =
+    data_get data_identifier >>= fun map -> return (MP.find map k)
 
-  let map_find_exns s data_hkey k =
-    map_find data_hkey k >>= function Some v -> return v | None -> error s
+  let map_find_exns s data_identifier k =
+    map_find data_identifier k >>= function Some v -> return v | None -> error s
 
-  let map_find_exn data_hkey k =
-    map_find_exns "Not found" data_hkey k
+  let map_find_exn data_identifier k =
+    map_find_exns "Not found" data_identifier k
 
   exception BadUpdate
-  let map_update data_hkey k ?default f =
+  let map_update data_identifier k ?default f =
     try
-      data_update data_hkey (fun m ->
+      data_update data_identifier (fun m ->
           let v = match (MP.find m k,default) with
             | (Some v, _) |(None, Some v) -> v
             | (None,None) -> raise BadUpdate in
@@ -314,21 +314,21 @@ module Program = struct
     ((C.construct args) >>= fun ret -> return (address,ret)) (state',context')
   [@@ocaml.warning "-32"]
 
-  (* Get the code given by `code_hkey` at `address`, run it in *context'` instead
+  (* Get the code given by `code_identifier` at `address`, run it in *context'` instead
      of the current context *)
-  let _call context' address code_hkey args (state,context) =
-    match _get_in_hmap_option code_hkey address state.hmaps with
+  let _call context' address code_identifier args (state,context) =
+    match _get_in_hmap_option code_identifier address state.hmaps with
     | Some code -> code args (state,context')
     | None -> (Error ("Code not found",context),state)
 
-  (* Get the code given by `code_hkey` at `address`, run it at `address` *)
-  let call address code_hkey args (state,context) =
+  (* Get the code given by `code_identifier` at `address`, run it at `address` *)
+  let call address code_identifier args (state,context) =
     let context' = ({constructor=false; this=address;caller=context.this}) in
-    _call context' address code_hkey args (state,context)
+    _call context' address code_identifier args (state,context)
 
-  (* Get the code given by `code_hkey` at `address` but run it in the current context *)
-  let delegatecall address code_hkey args (state,context) =
-    _call context address code_hkey args (state,context)
+  (* Get the code given by `code_identifier` at `address` but run it in the current context *)
+  let delegatecall address code_identifier args (state,context) =
+    _call context address code_identifier args (state,context)
 
   (* Convenience, do a call at current address *)
   let callthis chk args (state,context) =
@@ -349,7 +349,7 @@ module Program = struct
     f (state,{context with this=address; caller=(caller |? context.caller)})
 
   (* Check if a contract has an entry for key `k` *)
-  let if_responds address (k:('a,'b) code_hkey) (args:'a) : 'b option st = fun (state,context) ->
+  let if_responds address (k:('a,'b) code_identifier) (args:'a) : 'b option st = fun (state,context) ->
     (match _get_in_hmap_option k address state.hmaps with
      | Some c -> c args >>= fun ret -> return (Some ret)
      | None -> return None) (state,context)
@@ -418,12 +418,12 @@ module Chain = struct
     | (Error _,_) -> None
 
   (* User sends a transactions *)
-  let tx_with_return user address code_hkey args =
+  let tx_with_return user address code_identifier args =
     require_admin_s "tx_user" >> fun (state ,context) ->
-    (call address code_hkey args) (state,{context with this=user})
+    (call address code_identifier args) (state,{context with this=user})
 
-  let tx user address code_hkey args (state,context) =
-    match tx_with_return user address code_hkey args (state,context) with
+  let tx user address code_identifier args (state,context) =
+    match tx_with_return user address code_identifier args (state,context) with
     | (Ok _, new_state) -> (Ok (), new_state)
     | (Error (v,c),_) ->
         let sf = Format.std_formatter in
@@ -489,8 +489,8 @@ module Imp = struct
       (Error (m,e), Nucleus.state_get !env)
 
   module Monad = struct
-    type 'a data_hkey = 'a Nucleus.data_hkey
-    type ('a,'b) code_hkey = ('a,'b) Nucleus.code_hkey
+    type 'a data_identifier = 'a Nucleus.data_identifier
+    type ('a,'b) code_identifier = ('a,'b) Nucleus.code_identifier
 
     let bind t1 t2 = t2 t1
     let (>>=) = bind
@@ -509,36 +509,36 @@ module Imp = struct
 
     let code = FP.code
 
-    let code_set code_hkey code = imp @@ FP.code_set code_hkey (unimp code)
+    let code_set code_identifier code = imp @@ FP.code_set code_identifier (unimp code)
 
     let code_private code = imp @@ FP.code_private (unimp code)
 
     let data = FP.data
 
-    let data_set data_hkey v = imp @@ FP.data_set data_hkey v
+    let data_set data_identifier v = imp @@ FP.data_set data_identifier v
 
-    let data_get data_hkey = imp @@ FP.data_get data_hkey
+    let data_get data_identifier = imp @@ FP.data_get data_identifier
 
-    let data_update data_hkey f = imp @@ FP.data_update data_hkey f
+    let data_update data_identifier f = imp @@ FP.data_update data_identifier f
 
     let data_private v  = imp @@ FP.data_private v
 
-    let map_set data_hkey k v = imp @@ FP.map_set data_hkey k v
+    let map_set data_identifier k v = imp @@ FP.map_set data_identifier k v
 
-    let map_remove data_hkey k = imp @@ FP.map_remove data_hkey k
+    let map_remove data_identifier k = imp @@ FP.map_remove data_identifier k
 
-    let map_find data_hkey k = imp @@ FP.map_find data_hkey k
+    let map_find data_identifier k = imp @@ FP.map_find data_identifier k
 
-    let map_find_exns s data_hkey k = imp @@ FP.map_find_exns s data_hkey k
+    let map_find_exns s data_identifier k = imp @@ FP.map_find_exns s data_identifier k
 
-    let map_find_exn data_hkey k = imp @@ FP.map_find_exn data_hkey k
+    let map_find_exn data_identifier k = imp @@ FP.map_find_exn data_identifier k
 
     exception BadUpdate
 
-    let map_update data_hkey k ?default f =
+    let map_update data_identifier k ?default f =
       match default with
-      | Some default -> imp @@ FP.map_update data_hkey k ~default f
-      | None -> imp @@ FP.map_update data_hkey k f
+      | Some default -> imp @@ FP.map_update data_identifier k ~default f
+      | None -> imp @@ FP.map_update data_identifier k f
 
     let get_caller () = imp @@ FP.get_caller
 
@@ -549,11 +549,11 @@ module Imp = struct
     let create_empty_contract name = imp @@ FP.create_empty_contract name
     let create_user = create_empty_contract
 
-    let _call context' address code_hkey args = imp @@ FP._call context' address code_hkey args
+    let _call context' address code_identifier args = imp @@ FP._call context' address code_identifier args
 
-    let call address code_hkey args = imp @@ FP.call address code_hkey args
+    let call address code_identifier args = imp @@ FP.call address code_identifier args
 
-    let delegatecall address code_hkey args = imp @@ FP.delegatecall address code_hkey args
+    let delegatecall address code_identifier args = imp @@ FP.delegatecall address code_identifier args
 
     let callthis chk args = imp @@ FP.callthis chk args
 
@@ -593,10 +593,10 @@ module Imp = struct
 
     include Monad
 
-    let tx user address code_hkey args = imp @@ FC.tx user address code_hkey args
+    let tx user address code_identifier args = imp @@ FC.tx user address code_identifier args
 
-    let tx_with_return user address code_hkey args =
-      imp @@ FC.tx_with_return user address code_hkey args
+    let tx_with_return user address code_identifier args =
+      imp @@ FC.tx_with_return user address code_identifier args
 
     let tx_create user name t args = imp @@ FC.tx_create user name (unimp t) args
 

@@ -52,32 +52,32 @@ module Admin = struct
 end
 
 module User = struct
-  let segment_of        : (A.t,A.t option) code_hkey = code ()
+  let segment_of        : (A.t,A.t option) code_identifier = code ()
   (* Start a new tl with 2 positions *)
-  let init_tl           : (string * string * A.t, A.t * A.t) code_hkey = code ()
+  let init_tl           : (string * string * A.t, A.t * A.t) code_identifier = code ()
   (* Transfers *)
   (* Give all tokens owned by address at some index to owner of address *)
-  let collect_token     : (A.t * token, unit) code_hkey = code ()
+  let collect_token     : (A.t * token, unit) code_identifier = code ()
   (* Give address1 owned by address2 to owner of address 2 *)
-  let collect_address   : (A.t, unit) code_hkey = code ()
+  let collect_address   : (A.t, unit) code_identifier = code ()
   (* Transfer token amount from caller to address *)
-  let transfer_token    : (token * amount * A.t, unit) code_hkey = code ()
+  let transfer_token    : (token * amount * A.t, unit) code_identifier = code ()
   (* Transfer address from caller to address *)
-  let transfer_address  : (A.t * A.t, unit) code_hkey = code ()
+  let transfer_address  : (A.t * A.t, unit) code_identifier = code ()
   (* read info *)
   (* owners of boxes&positions are anything *)
-  let owner_of          : (A.t, A.t) code_hkey = code ()
+  let owner_of          : (A.t, A.t) code_identifier = code ()
   (* a position may or may not have a box *)
   (* pos -> prov *)
-  let box_of            : (A.t, A.t option) code_hkey = code ()
+  let box_of            : (A.t, A.t option) code_identifier = code ()
   (* any -> ... *)
 
-  let balance_of        : (A.t * token, amount) code_hkey = code ()
+  let balance_of        : (A.t * token, amount) code_identifier = code ()
   (* Convenience composition of right_prov and get_balance *)
   (* convenience *)
-  let box_balance_of    : (A.t * token, amount) code_hkey = code ()
-  let fund_with_token   : (token * amount * pos * side,unit) code_hkey = code ()
-  let fund_with_address : (A.t * pos * side,unit) code_hkey = code ()
+  let box_balance_of    : (A.t * token, amount) code_identifier = code ()
+  let fund_with_token   : (token * amount * pos * side,unit) code_identifier = code ()
+  let fund_with_address : (A.t * pos * side,unit) code_identifier = code ()
 
   let new_pos s =
     let pos     = create_empty_contract s in
@@ -201,14 +201,14 @@ end
 (* Contract will be imported into Dec *)
 module Legal = struct
   (* Extend a tl *)
-  let grow             : (parties * string * A.t * A.t, pos) code_hkey = code ()
+  let grow             : (parties * string * A.t * A.t, pos) code_identifier = code ()
   (* Backward reduce *)
-  let pull             : (parties, unit) code_hkey = code ()
+  let pull             : (parties, unit) code_identifier = code ()
   (* Forward reduce *)
-  let commit           : (parties, unit) code_hkey = code ()
+  let commit           : (parties, unit) code_identifier = code ()
   (* Send tokens from left or right ledger to address *)
-  let transfer_token   : (parties * side * token * amount * A.t,unit) code_hkey = code ()
-  let transfer_address : (parties * side * A.t * A.t,unit) code_hkey = code ()
+  let transfer_token   : (parties * side * token * amount * A.t,unit) code_identifier = code ()
+  let transfer_address : (parties * side * A.t * A.t,unit) code_identifier = code ()
 
   let construct () =
 
@@ -298,10 +298,10 @@ module Legal = struct
 end
 
 module Zwrap = struct
-  let get_proxy : (unit,A.t)  code_hkey = code ()
-  let enable    : (unit,unit) code_hkey = code ()
-  let disable   : (unit,unit) code_hkey = code ()
-  let test      : (unit,bool) code_hkey = code ()
+  let get_proxy : (unit,A.t)  code_identifier = code ()
+  let enable    : (unit,unit) code_identifier = code ()
+  let disable   : (unit,unit) code_identifier = code ()
+  let test      : (unit,bool) code_identifier = code ()
 
 
   (* A contract with its own address, here for security reasons *)
@@ -312,7 +312,7 @@ module Zwrap = struct
       data_set dec_addr dec
 
     module Magic = struct
-      (* Should be a command stored in an hkey *)
+      (* Should be a command stored in an identifier *)
       let call_zwrap zwrap_proxy (caller,key,args) =
         proxy zwrap_proxy ~caller (fun () ->
           let dec = data_get dec_addr in

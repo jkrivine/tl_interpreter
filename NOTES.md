@@ -22,7 +22,7 @@ module InnerProgram(M:Interface) = struct
  let is_admin = M.wrap_unit @@
     ...admin code...
 
- let code_set code_hkey code = M.wrap @@ fun (state,context) ->
+ let code_set code_identifier code = M.wrap @@ fun (state,context) ->
    ...code_set code...
 
 end
@@ -36,13 +36,13 @@ Also (for instance), anything which uses `code_set` followed by ``>>`` would cre
 To do that we can use `unwrap` on `code_set` applied to all its argument except the last (we can't apply to on `code_set` *after* application of all the arguments, since at that point it may have already been evaluated (for the imperative version). So :
 
 ```
-... code_set code_hkey code ... 
+... code_set code_identifier code ... 
 ```
 
 becomes 
 
 ```
-... M.unwrap(code_set code_hkey) code ...
+... M.unwrap(code_set code_identifier) code ...
 ```
 
 I haven't tried completely converting the codebase t othis format so there may be unexpected issues. I decided against it though, because it makes the code seriously cryptic (with `wrap`/`unwrap`'s) everywhere just to save a 100 lines of boilerplate code at the end of `lib/env.ml`.
@@ -181,13 +181,13 @@ to automatically derive printing methods, I could use a record-based approach wi
 
 ```
    module M = struct
-    type t = {a: int hkey; b: string hkey}
+    type t = {a: int identifier; b: string identifier}
     let store = {a = storage 0 "a"; b = storage "ok" "b"}
    end
 ```
 
-then I would write `get_data M.store.a`. But the generated printing function for a `'a hkey`
-would have to be of type `env -> fmt -> 'a hkey -> unit`.
+then I would write `get_data M.store.a`. But the generated printing function for a `'a identifier`
+would have to be of type `env -> fmt -> 'a identifier -> unit`.
 Still it could be done someday!
 
 # early march 2020

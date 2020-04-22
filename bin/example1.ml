@@ -35,7 +35,7 @@ module Contract = struct
      address. In OCaml code, they are keys of a heterogenous map. These keys
      are reused in multiple heterogenous maps, for every instanciation of the
      contract. We will call those locations (whether for code or storage)
-     `hkey`s. *)
+     `identifier`s. *)
 
   (* `construct` is just a generic name for the constructor. New instances of
      the contract should be created by calling construct *)
@@ -46,11 +46,11 @@ module Contract = struct
        * an execution context, which includes the current address
        *)
 
-    (* `code_set` takes an hkey and a function, and binds that function
-       to that hkey in the current address' storage space *)
+    (* `code_set` takes an identifier and a function, and binds that function
+       to that identifier in the current address' storage space *)
 
     (* For instance here, we bind a function which updates the int associated
-       with the `counter` hkey to the `incr` hkey. *)
+       with the `counter` identifier to the `incr` identifier. *)
     P.code_set incr begin fun () ->
       P.data_update counter (fun c -> c+1)
     end >>
@@ -85,14 +85,14 @@ let () = ignore ( C.execute (
     let* c' = C.tx_create userA "c'" Contract.construct () in
 
     (* `tx` initiates a normal transaction. It takes an originating address, a
-       contract address, an hkey and appropriate arguments *)
+       contract address, an identifier and appropriate arguments *)
     C.tx userA c Contract.incr () >>
 
     (* `echo_env` pretty-prints the current state (global storage) and calling context.
        The commands `echo_state` and `echo_context` are also avialable. *)
     C.echo_env >>
 
-    (* Note that the same hkey is given to two different instances of the
+    (* Note that the same identifier is given to two different instances of the
        contract. Similarly, in solidity, a same function digest can be used to
        call two different addresses *)
     C.tx userA c  Contract.incr () >>
