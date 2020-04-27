@@ -374,7 +374,7 @@ let construct () =
         return ()
     end
 
-let echo_dec =
+let echo_dec () =
   echo_data ledger ;
   echo_data owners ;
   echo_data nexts ;

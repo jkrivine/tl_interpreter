@@ -77,5 +77,5 @@ module User : sig
   val fund_with_address : (A.t * pos * side,unit) code_identifier
 end
 
-val echo_dec : unit
+val echo_dec : unit -> unit
 val construct : unit -> unit
