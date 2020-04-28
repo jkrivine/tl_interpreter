@@ -50,7 +50,9 @@ let construct () =
   code_set transfer (fun (amount,taker) ->
       let giver = get_caller () in
       transfer' giver amount taker;
-      if_responds taker on_token_receive (giver,token_addr,amount));
+      if responds taker on_token_receive then
+        call taker on_token_receive (giver,token_addr,amount)
+      else ());
 
   code_set transfer_up_to (fun (amount,taker) ->
       let giver = get_caller () in

@@ -123,7 +123,7 @@ module type Program = sig
   val import : 'a unit_st -> 'a st
 
   (* Check if a contract has an entry for key `k` *)
-  val if_responds : Address.t -> ('a,'b) code_identifier -> 'a -> 'b option st
+  val responds : Address.t -> ('a,'b) code_identifier -> bool st
 
   (* Time stuff, some of it admin-only *)
   val time_get : int unit_st

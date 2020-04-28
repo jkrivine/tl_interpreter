@@ -349,10 +349,10 @@ module Program = struct
     f (state,{context with this=address; caller=(caller |? context.caller)})
 
   (* Check if a contract has an entry for key `k` *)
-  let if_responds address (k:('a,'b) code_identifier) (args:'a) : 'b option st = fun (state,context) ->
+  let responds address (k:('a,'b) code_identifier) : bool st = fun (state,context) ->
     (match _get_in_hmap_option k address state.hmaps with
-     | Some c -> c args >>= fun ret -> return (Some ret)
-     | None -> return None) (state,context)
+     | Some c -> return true
+     | None -> return false) (state,context)
 
   module Echo = struct
     (*
@@ -569,7 +569,7 @@ module Imp = struct
     let import f = imp @@ FP.import (unimp f ())
 
     (* Check if a contract has an entry for key `k` *)
-    let if_responds address k args = imp @@ FP.if_responds address k args
+    let responds address k = imp @@ FP.responds address k
 
     let time_get () = imp @@ FP.time_get
 
