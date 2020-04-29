@@ -37,7 +37,7 @@ module Nucleus = struct
       constructor: bool
     }
     type env = state*context
-    type 'a st = env -> ( ('a,(string*context)) result * state )
+    type 'a st = env -> ( ('a,(string*context*Printexc.raw_backtrace)) result * state )
     type ('a,'b) code_identifier = ('a -> 'b st) HM.key
     type 'a data_identifier = 'a HM.key
   end
@@ -53,12 +53,12 @@ module Nucleus = struct
     let bind t1 t2 =
       fun (s,c) -> match t1 (s,c) with
         | (Ok v,s') -> t2 v (s',c)
-        | (Error (v,c),s') -> (Error (v,c),s')
+        | (Error (v,c,cs),s') -> (Error (v,c,cs),s')
     let (>>=) = bind
     let ( let* ) t1 t2 = bind t1 t2
     let (>>) t1 t2 = bind t1 (fun _ -> t2)
     let return v = fun (s,_) -> (Ok v,s)
-    let error v = fun (s,c) -> (Error (v,c),s)
+    let error v = fun (s,c) -> (Error (v,c,Printexc.get_callstack 10),s)
     let (|?*) a default = a >>= function Some e -> return e | None -> return default
   end
 
@@ -112,6 +112,7 @@ module Nucleus = struct
 
 
   let _require_admin context = context.this = Address.admin
+  let _require_admin_caller context = context.caller = Address.admin
 
   (* Admin-only stuff *)
   (* Execution at the 'root' is from the admin address.
@@ -119,6 +120,9 @@ module Nucleus = struct
      The admin address can execute some privileged functions *)
   let ite_admin t1 t2 (state,context) =
     (if _require_admin context then t1 () else t2 ()) (state,context)
+
+  let ite_admin_caller t1 t2 (state,context) =
+    (if _require_admin_caller context then t1 () else t2 ()) (state,context)
 
   let is_equal t1 t2 =
     let* r1 = t1 in
@@ -156,7 +160,8 @@ module Nucleus = struct
   let get_in_hmap identifier =
     get_in_hmap_option identifier >>= function
     | Some v -> return v
-    | None -> error "No such identifier"
+    | None ->
+      error ("No such identifier: "^((HM.Key.info identifier).name))
 
   (* Set value associated with [identifier] in this context's hmap *)
   let set_in_hmap identifier v =
@@ -184,6 +189,12 @@ module Program = struct
   open Nucleus
   open Tools
 
+  let is_admin =
+    ite_admin (fun () -> return true) (fun () -> return false)
+
+  let is_admin_caller =
+    ite_admin_caller (fun () -> return true) (fun () -> return false)
+
   let require_admin : unit st =
     ite_admin (fun () -> return ()) (fun () -> error "not admin")
 
@@ -199,13 +210,13 @@ module Program = struct
         | Some _ -> error "Code already set at this identifier"
         | None -> set_in_hmap code_identifier code ) (state,context)
     else
-      (Error ("Cannot set code outside of constructor",context), state)
+      (Error ("Cannot set code outside of constructor",context,Printexc.get_callstack 10), state)
 
   let code_private f (state,context) =
     if context.constructor then
       (let k = code () in code_set k f >> return k) (state,context)
     else
-      (Error ("Cannot declare private code outside of constructor",context), state)
+      (Error ("Cannot declare private code outside of constructor",context,Printexc.get_callstack 10), state)
 
   let data ?pp name = HM.Key.create {name;pp;hidden=false}
   let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true}
@@ -319,7 +330,7 @@ module Program = struct
   let _call context' address code_identifier args (state,context) =
     match _get_in_hmap_option code_identifier address state.hmaps with
     | Some code -> code args (state,context')
-    | None -> (Error ("Code not found",context),state)
+    | None -> (Error ("Code not found",context,Printexc.get_callstack 10),state)
 
   (* Get the code given by `code_identifier` at `address`, run it at `address` *)
   let call address code_identifier args (state,context) =
@@ -342,7 +353,7 @@ module Program = struct
   let import f (state,context) =
     if context.constructor = true
     then f (state,context)
-    else (Error ("cannot inherit outside of constructor",context),state)
+    else (Error ("cannot inherit outside of constructor",context,Printexc.get_callstack 10),state)
 
   let proxy address ?caller f =
     require_admin_s "proxy" >> fun (state,context) ->
@@ -370,8 +381,16 @@ module Program = struct
 
     let echo_data k =
       let* v = data_get k in
-      HM.pp_binding Format.str_formatter (HM.B (k,v));
-      echo (Buffer.contents Format.stdbuf)
+      echo (pp_to_str HM.pp_binding (HM.B (k,v)))
+
+    let echo_pp s = Format.kfprintf (fun _ -> return ()) Format.std_formatter s
+
+    let echo_address a =
+      echo (Address.to_string a)
+
+    let echo_trace (state,context) =
+        (return (F.p Format.std_formatter "%s"
+          (Printexc.raw_backtrace_to_string @@ Printexc.get_callstack 10))) (state,context)
 
     (* Echo the current state *)
     let echo_state (state,context) =
@@ -425,12 +444,14 @@ module Chain = struct
   let tx user address code_identifier args (state,context) =
     match tx_with_return user address code_identifier args (state,context) with
     | (Ok _, new_state) -> (Ok (), new_state)
-    | (Error (v,c),_) ->
+    | (Error (v,c,callstack),_) ->
         let sf = Format.std_formatter in
         F.p sf "Error: %s" v;
         F.cr ();
         F.p sf "%s" "In ";
         pp_context sf c;
+        F.cr ();
+        F.p sf "%s" (Printexc.raw_backtrace_to_string @@ callstack);
         F.cr ();
         F.p sf "Reverting state...";
         F.cr ();
@@ -465,15 +486,22 @@ end
 
 
 module Imp = struct
+  open Tools
 
   let env = ref Nucleus.empty_env
 
-  exception EnvException of string*Nucleus.context
+  exception EnvException of string*Nucleus.context*Printexc.raw_backtrace
+
+  let () = Printexc.register_printer (function
+      | EnvException (s,c,cs) ->
+        Some (s^"\n"^pp_to_str Nucleus.pp_context c)
+      | _ -> None)
 
   let imp f =
     match f !env with
     | (Ok v,s') -> env := Nucleus.state_set !env s'; v
-    | (Error (m,c),s') -> env := Nucleus.state_set !env s'; raise (EnvException (m,c))
+    | (Error (m,c,cs),s') -> env := Nucleus.state_set !env s';
+      raise (EnvException (m,c,cs))
 
   let unimp f args = fun env' ->
     let env_bk = !env in
@@ -484,9 +512,9 @@ module Imp = struct
       env := (Nucleus.state_set env_bk s');
       (Ok v, s')
     with
-    | EnvException (m,e) ->
+    | EnvException (m,e,cs) ->
       env := env_bk;
-      (Error (m,e), Nucleus.state_get !env)
+      (Error (m,e,cs), Nucleus.state_get !env)
 
   module Monad = struct
     type 'a data_identifier = 'a Nucleus.data_identifier
@@ -497,7 +525,7 @@ module Imp = struct
     let ( let* ) t1 t2 = bind t1 t2
     let (>>) t1 t2 =  (ignore t1) ; t2
     let return v = v
-    let error s = raise (EnvException (s, Nucleus.context_get !env))
+    let error s = raise (EnvException (s,Nucleus.context_get !env,Printexc.get_callstack 10))
     let (|?*) = Tools.(|?)
   end
 
@@ -564,6 +592,9 @@ module Imp = struct
       | Some caller -> imp @@ FP.proxy address ~caller (unimp f ())
       | None -> imp @@ FP.proxy address (unimp f ())
 
+    let is_admin () = imp @@ FP.is_admin
+    let is_admin_caller () = imp @@ FP.is_admin_caller
+
     let require_admin () = imp @@ FP.require_admin
 
     let import f = imp @@ FP.import (unimp f ())
@@ -577,6 +608,12 @@ module Imp = struct
       let echo str = imp @@ FP.echo str
 
       let echo_data k = imp @@ FP.echo_data k
+
+      let echo_pp s = Format.kfprintf (fun _ -> return ()) Format.std_formatter s
+
+      let echo_trace () = imp @@ FP.echo_trace
+
+      let echo_address k = imp @@ FP.echo_address k
 
       let echo_state () = imp @@ FP.echo_state
 

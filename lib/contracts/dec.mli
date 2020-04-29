@@ -17,6 +17,9 @@ val pp_pos : Format.formatter -> pos -> unit
 type side = Source | Target
 [@@deriving show]
 
+val ledger   : Ledger.t data_identifier
+val owners   : (pos,pos) MP.t data_identifier
+
 type parties = A.t*A.t
 
 module Legal : sig
@@ -66,6 +69,7 @@ module User : sig
   (* read info *)
   (* owners of boxes&positions are anything *)
   val owner_of         : (A.t, A.t) code_identifier
+  val owner_of_opt     : (A.t, A.t option) code_identifier
   (* a position may or may not have a box *)
   (* pos -> prov *)
   val box_of           : (A.t, A.t option) code_identifier
@@ -75,6 +79,8 @@ module User : sig
   val box_balance_of   : (A.t * token, amount) code_identifier
   val fund_with_token  : (token * amount * pos * side,unit) code_identifier
   val fund_with_address : (A.t * pos * side,unit) code_identifier
+  val next_of :           (A.t, A.t option) code_identifier
+  val segment_of        : (A.t,A.t option) code_identifier
 end
 
 val echo_dec : unit -> unit

@@ -16,6 +16,9 @@ let cr () =
 
 let p fmt s =
   Format.fprintf fmt s
+
+let pfn s =
+  Format.kfprintf (fun _ -> cr()) Format.std_formatter s
   (*Format.formatter ->*)
 (*(unit, Format.formatter, unit, unit, unit, unit)*)
 (*CamlinternalFormatBasics.format6 -> unit*)

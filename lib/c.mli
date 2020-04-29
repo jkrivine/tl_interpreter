@@ -27,6 +27,12 @@ module type Echo = sig
   val echo : string -> unit st
 
   val echo_data : 'a data_identifier -> unit st
+      
+  val echo_pp : ('a, Format.formatter, unit, unit st) format4 -> 'a
+
+  val echo_address : Address.t -> unit st
+
+  val echo_trace : unit unit_st
 
   (* Echo the current state *)
   val echo_state : unit unit_st
@@ -88,6 +94,8 @@ module type Program = sig
   (* Execution at the 'root' is from the admin address.
      Anything nested below that is by a user or a contract
      The admin address can execute some privileged functions *)
+  val is_admin : bool unit_st
+  val is_admin_caller : bool unit_st
   val require_admin : unit unit_st
 
   (* Utilities *)

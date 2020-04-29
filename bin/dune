@@ -2,9 +2,12 @@
  (libraries lib)
  (names 
   loan 
+unroll_test
   example0
   example1 
   example2 
   polyglot
  )
-(modes byte exe))
+(modes byte exe)
+(preprocess (pps ppx_deriving.show))
+)

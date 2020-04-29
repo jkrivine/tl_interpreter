@@ -17,6 +17,8 @@ let singleton = M.singleton
 let takeout m k = (M.remove m k, M.find m k)
 let change m k f = M.change m k ~f
 let mem m k = M.mem m k
+let filter m f = M.filteri m ~f:(fun ~key ~data -> f key data)
+let map m f = M.mapi m ~f:(fun ~key ~data -> f key data)
 (* Print each map entry *)
 let pp fmt_k fmt_d fmt m =
   if M.is_empty m then
@@ -29,6 +31,8 @@ let pp fmt_k fmt_d fmt m =
         F.with_indent (fun () -> F.p fmt "%a" fmt_d data);
         )
   end
+
+let iteri m f = M.iteri m ~f:(fun ~key ~data -> f key data)
 
 (* Custom printing of each line *)
 let pp_i fmt iterator m =

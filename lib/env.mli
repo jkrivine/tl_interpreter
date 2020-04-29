@@ -5,6 +5,7 @@ module Nucleus : sig
   (*type env*)
 
   type 'a st
+  type 'a unit_st
   type ('a,'b) code_identifier
   type 'a data_identifier
 

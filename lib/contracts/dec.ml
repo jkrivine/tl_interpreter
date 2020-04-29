@@ -67,6 +67,7 @@ module User = struct
   (* read info *)
   (* owners of boxes&positions are anything *)
   let owner_of          : (A.t, A.t) code_identifier = code ()
+  let owner_of_opt      : (A.t, A.t option) code_identifier = code ()
   (* a position may or may not have a box *)
   (* pos -> prov *)
   let box_of            : (A.t, A.t option) code_identifier = code ()
@@ -78,12 +79,26 @@ module User = struct
   let box_balance_of    : (A.t * token, amount) code_identifier = code ()
   let fund_with_token   : (token * amount * pos * side,unit) code_identifier = code ()
   let fund_with_address : (A.t * pos * side,unit) code_identifier = code ()
+  let next_of :           (A.t, A.t option) code_identifier = code ()
 
   let new_pos s =
     let pos     = create_empty_contract s in
     let pos_box = create_empty_contract (s^".box") in
     map_set nexts pos pos_box ;
-    return (pos,pos_box)
+    (pos,pos_box)
+
+  let is_pos p =
+    match map_find nexts p with
+    | None -> false
+    | Some b -> match map_find segments b with
+      | Some _ -> true
+      | None -> match map_find nexts b with
+        | None -> false
+        | Some p' -> match map_find nexts p' with
+          | None -> false
+          | Some b' -> match map_find segments b' with
+            | Some _ -> true
+            | None -> false
 
   let construct () =
     (* Dec *)
@@ -97,13 +112,20 @@ module User = struct
         map_find segments addr_box
       | Some _ ->
         match map_find nexts addr with
-        | None -> return None
+        | None -> None
         | Some pos ->
           let pos_box = map_find_exn nexts pos in
           (* it would be invalid to return None here *)
           map_find segments pos_box
     end;
 
+  (*let box_of            : (A.t, A.t option) code_identifier = code ()*)
+    code_set box_of begin fun p ->
+      if is_pos p then
+        Some (map_find_exn nexts p)
+      else
+        None
+    end;
 
     code_set init_tl
       begin fun (source_name,target_name,contract) ->
@@ -114,7 +136,7 @@ module User = struct
         Admin.set_owner target owner ;
         map_set nexts source_box target ;
         map_set segments target_box contract ;
-        return (source,target)
+        (source,target)
       end ;
 
 
@@ -127,13 +149,13 @@ module User = struct
     code_set fund_with_token
       begin fun (token, amount, pos, side) ->
         let taker = match side with
-          | Target -> return pos
+          | Target -> pos
           | Source ->
             match callthis box_of pos with
             | None ->
               error "this pos has no box"
             | Some box ->
-              return box
+              box
               (* use transfer_*_from to check that giver is owner of addr *)
         in callthis transfer_token (token,amount,taker)
       end ;
@@ -147,11 +169,11 @@ module User = struct
     code_set fund_with_address
       begin fun (addr, pos, side) ->
         let taker = match side with
-          | Target -> return pos
+          | Target -> pos
           | Source ->
             match callthis box_of pos with
             | None -> error "this pos has no box"
-            | Some box -> return box
+            | Some box -> box
             (* use transfer_*_from to check that giver is owner of addr *)
         in callthis transfer_address (addr,taker)
       end ;
@@ -159,13 +181,13 @@ module User = struct
     let test_collectable addr =
       let next_opt = map_find nexts addr in
       let segment_opt = map_find segments addr in
-      return ((next_opt = None) && (segment_opt = None)) in
+      ((next_opt = None) && (segment_opt = None)) in
 
     let require_collectable addr =
       let collectable = test_collectable addr in
       if collectable
-      then return ()
-      else error "Not collectable" in
+      then ()
+      else error (Format.asprintf "Not collectable: %a" Address.pp addr) in
 
     code_set collect_token
       begin fun (giver, tk) ->
@@ -187,6 +209,11 @@ module User = struct
         map_find_exn owners p
       end ;
 
+    code_set owner_of_opt
+      begin fun p ->
+        map_find owners p
+      end ;
+
     code_set balance_of
       begin fun (a,tk) ->
         Ledger.balance ledger a ~index:"" tk
@@ -195,7 +222,14 @@ module User = struct
     code_set box_balance_of
       begin fun (a,tk) ->
         match callthis box_of a with
-        None -> return 0 | Some b -> callthis balance_of (b,tk)
+        None -> 0 | Some b -> callthis balance_of (b,tk)
+      end ;
+
+    code_set next_of
+      begin fun p ->
+        require (is_pos p);
+        let b = map_find_exn nexts p in
+        map_find nexts b
       end
 end
 (* Contract will be imported into Dec *)
@@ -223,7 +257,7 @@ module Legal = struct
         let caller = get_caller () in
         if segment <> caller
         then error "caller is not segment of source"
-        else return () in
+        else () in
 
     code_set grow
       begin fun ((source,target),pos_name,owner,contract) ->
@@ -237,8 +271,16 @@ module Legal = struct
           map_set owners pos owner ;
           map_set nexts target_box pos ;
           map_set segments pos_box contract ;
-          return pos
+          pos
       end ;
+
+    let clean_singleton pos =
+      let box = map_find_exn nexts pos in
+      match map_find segments box with
+      | Some _ -> ()
+      | None ->
+        map_remove nexts pos ;
+        map_set owners box (map_find_exn owners pos) in
 
     code_set pull
       begin fun (source,target) ->
@@ -252,10 +294,13 @@ module Legal = struct
             map_set nexts source_box new_target ;
             map_set segments new_target_box segment
           | None ->
-            map_remove nexts source) ;
+            map_remove nexts source_box) ;
         map_remove nexts target ;
         map_remove nexts target_box ;
-        map_remove segments target_box
+        map_remove segments target_box ;
+        let target_owner = map_find_exn owners target in
+        map_set owners target_box target_owner;
+        clean_singleton source
       end ;
 
     code_set commit
@@ -271,7 +316,10 @@ module Legal = struct
             map_remove segments target_box) ;
         map_remove nexts source_box ;
         map_remove nexts target ;
-        map_set nexts source target_box
+        map_set nexts source target_box ;
+        let source_owner = map_find_exn owners source in
+        map_set owners source_box source_owner ;
+        clean_singleton source
       end ;
 
     code_set transfer_token
@@ -320,7 +368,7 @@ module Zwrap = struct
           call dec enable () ;
           let retval = call caller' key (caller,args) in
           call dec disable () ;
-          return retval
+          retval
         )
     end
   end
@@ -333,18 +381,17 @@ module Zwrap = struct
 
     code_set get_proxy
       begin fun () ->
-        return zwrap_proxy
+        zwrap_proxy
       end ;
 
     code_set enable
       begin fun () ->
+        require (is_admin_caller () || (get_caller ()) = zwrap_proxy);
         Ledger.zwrap_start ledger
       end ;
 
     code_set disable
       begin fun () ->
-        let caller = get_caller () in
-        require (return (caller = zwrap_proxy)) ;
         Ledger.zwrap_end ledger
       end ;
 
@@ -365,14 +412,13 @@ let construct () =
   User.construct () ;
 
   (* Callbacks *)
-  code_set Token.on_token_receive
-    begin fun (giver,token,amount) ->
+  code_set Token.on_token_receive @@
+    fun (giver,token,amount) ->
       let caller = get_caller () in
       if caller = token then
         Ledger.add ledger giver token amount
       else
-        return ()
-    end
+        ()
 
 let echo_dec () =
   echo_data ledger ;

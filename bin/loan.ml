@@ -7,21 +7,25 @@ module Loan = struct
 
   let construct dec ~time ~price:(tk,a) () =
 
-    P.code_set repay begin
-      fun ((source,_target) as parties) ->
-        let source_owner = P.call dec Dec.User.owner_of source in
-        P.call dec Dec.Legal.transfer_token (parties,Dec.Target,tk,a,source_owner) ;
+    let pull = begin
+      fun ((_source,target) as parties) ->
+        let target_owner = P.call dec Dec.User.owner_of target in
+        P.call dec Dec.Legal.transfer_token (parties,Dec.Source,tk,a,target_owner) ;
         P.call dec Dec.Legal.pull parties
-    end ;
+    end in
+    P.code_set repay pull;
+    P.code_set Segment.pull pull;
 
-    P.code_set seize begin
+    let commit = begin
       fun parties ->
         let current_time = P.time_get () in
         if current_time > time then
           P.call dec Dec.Legal.commit parties
         else
-          P.return ()
-    end
+          P.error "too soon to seize collateral"
+    end in
+    P.code_set seize commit;
+    P.code_set Segment.commit commit
 end
 
 let () =
@@ -35,55 +39,61 @@ let () =
     let google = P.create_contract "google" Token.construct () in
     let dollar = P.create_contract "$"      Token.construct () in
 
-    let uA = P.create_user "user A" in
-    let uB = P.create_user "user B" in
+    let alice = P.create_user "alice" in
+    let bob = P.create_user "bob" in
 
-    P.call google Token.mint_for (110,uA) ;
-    P.call dollar Token.mint_for (3000,uB) ;
-    P.call dollar Token.mint_for (5,uA) ;
+    P.call google Token.mint_for (110,alice) ;
+    P.call dollar Token.mint_for (3000,bob) ;
+    P.call dollar Token.mint_for (500,alice) ;
 
     (* User transactions begin here *)
 
     let loan1 =
-      C.tx_create uA "loan1" (Loan.construct dec ~time:10 ~price:(dollar,20)) () in
+      C.tx_create alice "loan1" (Loan.construct dec ~time:10 ~price:(dollar,20)) () in
 
-    let (u,v) = C.tx_with_return uA dec Dec.User.init_tl ("u","v",loan1) in
+    let (u,v) = C.tx_with_return alice dec Dec.User.init_tl ("u","v",loan1) in
 
 
-    (* uA injects 100 google and 5 dollars in its Dec account *)
-    C.tx uA google Token.transfer (100,dec) ;
-    C.tx uA dollar Token.transfer (5,dec) ;
+    (* alice injects 100 google and 5 dollars in its Dec account *)
+    C.tx alice google Token.transfer (100,dec) ;
+    C.tx alice dollar Token.transfer (25,dec) ;
 
-    (* uB injects 200 dollars in its Dec account *)
-    C.tx uB dollar Token.transfer (200,dec) ;
+    (* bob injects 200 dollars in its Dec account *)
+    C.tx bob dollar Token.transfer (200,dec) ;
 
-    (* uA gives the 100 google to position u *)
-    C.tx uA dec Dec.User.transfer_token (google,100,u) ;
+    C.state_save "pre-loan" ;
+    (* alice gives the 100 google to position u *)
+    C.tx alice dec Dec.User.transfer_token (google,100,u) ;
 
     (* Trade pos for dollar *)
-    (* 1. uB gives $18 to uA *)
-    C.tx uB dollar Token.transfer (18,uA) ;
-    (* 2. uA gives v to uB *)
-    C.tx uA dec Dec.User.transfer_address (v,uB) ;
+    (* 1. bob gives $18 to alice *)
+    C.tx bob dec Dec.User.transfer_token (dollar,18,alice) ;
+    (* 2. alice gives v to bob *)
+    C.tx alice dec Dec.User.transfer_address (v,bob) ;
     C.echo "Loan was established" ;
 
     C.echo_env () ;
     C.state_save "loan" ;
+    (*let module U = Unroll.Make(struct let d = dec end) in*)
+    (*U.unroll ~times:[(u,loan1,v,Unroll.Fwd,11)] ~from:"pre-loan" u;*)
+    (*ignore (fun () ->*)
     (* -- loan is setup, now exploring 2 possible scenarios -- *)
 
-    (* -- uA pays back the loan -- *)
+    (* -- alice pays back the loan -- *)
     C.time_incr 8 ;
-    C.tx uA dec Dec.User.fund_with_token (dollar,20,u,Dec.Source) ;
-    C.tx uA loan1 Loan.repay (u,v) ;
+    C.tx alice dec Dec.User.fund_with_token (dollar,20,u,Dec.Source) ;
+    C.echo_env ();
+    C.tx alice loan1 Loan.repay (u,v) ;
     C.echo "Loan was repaid" ;
     C.echo_env () ;
 
-    (* -- uB grabs the collateral -- *)
+    (* -- bob grabs the collateral -- *)
     C.state_restore "loan" ;
     C.echo "Restoring initial state..." ;
     C.time_incr 11 ;
-    C.tx uB loan1 Loan.seize (u,v) ;
-    C.tx uB dec Dec.User.collect_token (u,google) ;
+    C.tx bob loan1 Loan.seize (u,v) ;
+    C.tx bob dec Dec.User.collect_token (u,google) ;
     C.echo "Loan was called in" ;
     C.echo_env ()
+ (* ) (* ) *)*)
 
