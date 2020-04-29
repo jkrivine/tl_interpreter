@@ -1,5 +1,8 @@
+(* Warning! The code below is super ugly. You probably want to wait until it
+   has been cleaned it up before reading it. *)
+
 open Imperative
-type dir = Bwd | Fwd
+type dir = Pull | Commit
 [@@deriving show { with_path = false }]
 
 module Make(D:sig val d : Address.t end) = struct
@@ -20,8 +23,8 @@ module Make(D:sig val d : Address.t end) = struct
         then k ()
         else
           let hedge () = cts length     (index+1) ct                callback k
-          and fwd      = cts (length-1) 1         ((Fwd,index)::ct) callback
-          and bwd      = cts (length-1) 1         ((Bwd,index)::ct) callback  in
+          and fwd      = cts (length-1) 1         ((Commit,index)::ct) callback
+          and bwd      = cts (length-1) 1         ((Pull,index)::ct) callback  in
           bwd (fun () -> fwd hedge)
 
       in  cts length 0 [] (fun l -> callback (List.rev l)) (fun () -> ())
@@ -44,18 +47,20 @@ module Make(D:sig val d : Address.t end) = struct
       | Some pos' -> (pos,Option.get (P.call D.d Dec.User.segment_of pos'),pos')::(t' pos')
     in t' pos
 
-  let tail pos =
-    let rec r x = function [] -> x | (p,_,p')::xs -> p::(r [p'] xs) in
-    r [] (triples pos)
+  let trail pos =
+    let rec r x = function [] -> [x] | (p,_,p')::xs -> p::(r p' xs) in
+    r pos (triples pos)
 
+  let owners pos = List.map (fun pos -> P.call D.d Dec.User.owner_of pos) (trail pos)
 
-  type tb = (Dec.A.t * Dec.A.t * Dec.A.t) list
-  [@@deriving show]
+  let segments pos = List.map (fun (_,s,_) -> s) (triples pos)
+
+  let show_tradeline pos =
+    let to_s l = List.map Address.to_string l in
+    Lines.from_strings (to_s (owners pos)) (to_s (trail pos)) (to_s (segments pos))
 
   let crawl times pos (dir,index) = begin
-    let ident_of = function Fwd -> Segment.commit | Bwd -> Segment.pull in
-    (*pp_tb Format.std_formatter (triples pos);*)
-    (*F.pp_int Format.std_formatter index;*)
+    let ident_of = function Commit -> Segment.commit | Pull -> Segment.pull in
     let (p,s,p') = List.nth (triples pos) index in
     (
     (match List.find_opt (fun ((_,_,_,_,t) as tup) -> tup = (p,s,p',dir,t)) times with
@@ -90,28 +95,39 @@ module Make(D:sig val d : Address.t end) = struct
           P.callthis Dec.User.collect_token (owned,token)
       )
 
-
   let rec next_nth p i =
     if i <= 0
     then p
     else next_nth (Option.get (P.call D.d Dec.User.next_of p)) (i-1)
 
-  let unroll ?(times=[]) ~from pos =
+  let unroll pos ?(times=[]) ~from =
     P.call D.d Dec.Zwrap.enable ();
-    let index_adjust = function Fwd -> 1 | Bwd -> 0 in
+    let index_adjust = function Commit -> 1 | Pull -> 0 in
     C.state_save "before_unroll";
     C.state_restore from;
     let ledger' = P.proxy D.d (fun () -> P.data_get Dec.ledger) in
     C.state_restore "before_unroll";
+    P.echo "Initial tradeline state";
+    P.echo "═══════════════════════";
+    P.echo (show_tradeline pos);
+
     Contractions.iter (List.length (triples pos)) (fun contractions ->
-        let players = List.sort_uniq compare @@ List.map (fun p -> P.call D.d Dec.User.owner_of p) (tail pos) in
-        F.pfn "Players: %s" ([%derive.show: Address.t list] players);
+        let players = List.sort_uniq compare @@ List.map (fun p -> P.call D.d Dec.User.owner_of p) (trail pos) in
+        (*F.pfn "Players: %s" ([%derive.show: Address.t list] players);*)
         let moves = ref [] in
+        let tradeline_states = ref "" in
         List.iter (fun (dir,index) ->
             moves := (dir, next_nth pos (index+(index_adjust dir)))::!moves;
-            crawl times pos (dir,index)
+            crawl times pos (dir,index);
+            tradeline_states := !tradeline_states^(
+            "Current tradeline state\n"
+            ^"───────────────────────\n"
+            ^(show_tradeline pos)^"\n")
           ) contractions;
-        P.echo ([%derive.show: (dir*Address.t) list] !moves);
+        let seq = [%derive.show: (dir*Address.t) list] !moves in
+        P.echo_pp "Playing sequence: %s\n" seq;
+        P.echo "═════════════════════════════";
+        P.echo !tradeline_states;
         collect players;
         P.proxy D.d (fun () ->
             let ledgerk' = P.data "ledger'" in
@@ -122,14 +138,23 @@ module Make(D:sig val d : Address.t end) = struct
           );
 
 
+        P.echo "Payoffs";
+        P.echo "───────";
         P.proxy D.d (fun () ->
             Ledger.pp_custom Format.std_formatter (P.data_get Dec.ledger)
               (fun fmt addr index tk amount ->
                  if amount = 0 then () else
                  let prefix = if amount >= 0 then "+" else "" in
                  let index_str = if index = "" then "" else ("."^index) in
-                 F.cr (); F.p fmt "%a%s: %s%d%a" Address.pp addr index_str prefix amount Dec.pp_token tk));
+                 F.p fmt "%a%s: %s%d%a" Address.pp addr index_str prefix amount Dec.pp_token tk;
+                 F.cr ();
+              ));
         P.echo "";
         C.state_restore "before_unroll";
       )
 end
+
+
+let payoffs d pos ?(times=[]) ~from =
+  let module U = Make(struct let d = d end) in
+  U.unroll pos ~times ~from

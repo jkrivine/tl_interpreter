@@ -227,7 +227,8 @@ module User = struct
 
     code_set next_of
       begin fun p ->
-        require (is_pos p);
+        require (is_pos p || test_collectable p);
+        if test_collectable p then None else
         let b = map_find_exn nexts p in
         map_find nexts b
       end

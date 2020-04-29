@@ -1,6 +1,9 @@
 type t = int * string
 let counter = ref 0
-let pp fmt (_,s) = F.p fmt "⦃ %s ⦄" s
+(*let pp fmt (_,s) = F.p fmt "⦃ %s ⦄" s*)
+let pp fmt (_,s) = F.p fmt "%s" s
+(*let pp fmt (_,s) = F.p fmt "⟨%s⟩" s*)
+(*let pp fmt (_,s) = F.p fmt "⦑ %s ⦒" s*)
 (*[@@deriving show]*)
 
 let eq = (=)

@@ -494,7 +494,7 @@ module Imp = struct
 
   let () = Printexc.register_printer (function
       | EnvException (s,c,cs) ->
-        Some (s^"\n"^pp_to_str Nucleus.pp_context c)
+        Some (s^"\n"^pp_to_str Nucleus.pp_context c^"\n"^(Printexc.raw_backtrace_to_string cs))
       | _ -> None)
 
   let imp f =

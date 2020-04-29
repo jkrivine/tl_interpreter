@@ -74,9 +74,9 @@ let () =
 
     C.echo_env () ;
     C.state_save "loan" ;
-    (*let module U = Unroll.Make(struct let d = dec end) in*)
-    (*U.unroll ~times:[(u,loan1,v,Unroll.Fwd,11)] ~from:"pre-loan" u;*)
-    (*ignore (fun () ->*)
+    (*let (module U) = Unroll.make dec in*)
+    Unroll.payoffs dec u ~times:[(u,loan1,v,Unroll.Commit,11)] ~from:"pre-loan";
+    ignore (fun () ->
     (* -- loan is setup, now exploring 2 possible scenarios -- *)
 
     (* -- alice pays back the loan -- *)
@@ -95,5 +95,5 @@ let () =
     C.tx bob dec Dec.User.collect_token (u,google) ;
     C.echo "Loan was called in" ;
     C.echo_env ()
- (* ) (* ) *)*)
+ ) (* ) *)
 

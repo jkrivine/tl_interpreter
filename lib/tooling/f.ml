@@ -17,12 +17,12 @@ let cr () =
 let p fmt s =
   Format.fprintf fmt s
 
+let s s =
+  p Format.std_formatter "%s" s
+
 let pfn s =
   Format.kfprintf (fun _ -> cr()) Format.std_formatter s
-  (*Format.formatter ->*)
-(*(unit, Format.formatter, unit, unit, unit, unit)*)
-(*CamlinternalFormatBasics.format6 -> unit*)
-(* shortcuts*)
+
 let pp_string = Format.pp_print_string
 let pp_int = Format.pp_print_int
 let pp_bool = Format.pp_print_bool
