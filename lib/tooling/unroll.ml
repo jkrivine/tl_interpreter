@@ -9,22 +9,22 @@ module Make(D:sig val d : Address.t end) = struct
 
   module Contractions = struct
 
-    type contractions = (dir*int) list
+    type t = (dir*int) list
     [@@deriving show]
 
 
     let iter length callback =
       let rec cts length index ct callback k =
         if (length < 0 || index < 0)
-        then failwith "requires length >= 0 and index >= 1"
+        then failwith "requires length >= 0 and index >= 0"
         else if length = 0
         then (callback ct ; k ())
         else if index >= length
         then k ()
         else
           let hedge () = cts length     (index+1) ct                callback k
-          and fwd      = cts (length-1) 1         ((Commit,index)::ct) callback
-          and bwd      = cts (length-1) 1         ((Pull,index)::ct) callback  in
+          and fwd      = cts (length-1) 0         ((Commit,index)::ct) callback
+          and bwd      = cts (length-1) 0         ((Pull,index)::ct) callback  in
           bwd (fun () -> fwd hedge)
 
       in  cts length 0 [] (fun l -> callback (List.rev l)) (fun () -> ())
@@ -38,7 +38,7 @@ module Make(D:sig val d : Address.t end) = struct
 
 
     let test () =
-      iter 2 (fun l -> print_endline (show_contractions l))
+      iter 2 (fun l -> print_endline (show l))
   end
 
   let rec triples pos =
@@ -62,11 +62,21 @@ module Make(D:sig val d : Address.t end) = struct
   let crawl times pos (dir,index) = begin
     let ident_of = function Commit -> Segment.commit | Pull -> Segment.pull in
     let (p,s,p') = List.nth (triples pos) index in
-    (
-    (match List.find_opt (fun ((_,_,_,_,t) as tup) -> tup = (p,s,p',dir,t)) times with
-    | Some (_,_,_,_,t) -> C.time_set t
-    | None -> ());
-    P.call s (ident_of dir) (p,p'))
+    begin (* apply times *)
+      (*P.echo ([%show: (Address.t * Address.t * Address.t * dir * int) list] times);*)
+      (*P.echo (Address.to_string s);*)
+      match List.find_opt (fun ((_,_,t) as tup) -> tup = (s,dir,t)) times with
+      | Some (_,_,t) ->
+        let time = P.time_get () in
+        if time > t then
+          ()
+        else (
+          P.echo_pp "Setting time to %i\n" t;
+          C.time_set t
+        )
+      | None -> ()
+    end;
+    P.call s (ident_of dir) (p,p')
   end
 
   (* Does not handle a player owning another player *)
@@ -111,23 +121,24 @@ module Make(D:sig val d : Address.t end) = struct
     P.echo "═══════════════════════";
     P.echo (show_tradeline pos);
 
+    (* Iterate on each reduction sequence *)
     Contractions.iter (List.length (triples pos)) (fun contractions ->
-        let players = List.sort_uniq compare @@ List.map (fun p -> P.call D.d Dec.User.owner_of p) (trail pos) in
-        (*F.pfn "Players: %s" ([%derive.show: Address.t list] players);*)
+        let players = List.sort_uniq compare @@
+          List.map (fun p -> P.call D.d Dec.User.owner_of p) (trail pos) in
         let moves = ref [] in
-        let tradeline_states = ref "" in
+        (* Iterate on each reduction *)
+        P.echo_pp "Playing sequence: %s\n" (Contractions.show contractions);
+        P.echo "═════════════════════════════";
         List.iter (fun (dir,index) ->
             moves := (dir, next_nth pos (index+(index_adjust dir)))::!moves;
             crawl times pos (dir,index);
-            tradeline_states := !tradeline_states^(
+            P.echo ("After move "^([%show: dir*Address.t] (List.hd !moves))^"\n"^
             "Current tradeline state\n"
             ^"───────────────────────\n"
-            ^(show_tradeline pos)^"\n")
+            ^(show_tradeline pos))
           ) contractions;
-        let seq = [%derive.show: (dir*Address.t) list] !moves in
-        P.echo_pp "Playing sequence: %s\n" seq;
-        P.echo "═════════════════════════════";
-        P.echo !tradeline_states;
+        let owner = P.call D.d Dec.User.owner_of pos in
+        C.tx owner D.d Dec.User.free_singleton pos;
         collect players;
         P.proxy D.d (fun () ->
             let ledgerk' = P.data "ledger'" in

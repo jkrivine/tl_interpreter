@@ -103,6 +103,7 @@ let rec ss_ls = function
 
 (* from_strings a b c returns, stacked : a (inter), b (inter), lines, c (flush) *)
 let from_strings users positions segments =
+  let segments = List.map (fun s -> " "^s^" ") segments in
   let lengths = max_lengths
       [lengths_inter users; lengths_inter positions; lengths_flush segments] in
   (spread_inter lengths users)^"\n"^

@@ -6,7 +6,6 @@ module Loan = struct
   let seize = P.code ()
 
   let construct dec ~time ~price:(tk,a) () =
-
     let pull = begin
       fun ((_source,target) as parties) ->
         let target_owner = P.call dec Dec.User.owner_of target in
@@ -73,7 +72,7 @@ let () =
 
     C.echo_env () ;
     C.state_save "loan" ;
-    Unroll.payoffs dec u ~times:[(u,loan1,v,Unroll.Commit,11)] ~from:"pre-loan";
+    Unroll.payoffs dec u ~times:[(loan1,Unroll.Commit,11)] ~from:"pre-loan";
     ignore (fun () ->
     (* -- loan is setup, now exploring 2 possible scenarios -- *)
 
