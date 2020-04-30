@@ -85,7 +85,7 @@ let pp fmt l =
   F.p fmt "(%d zcrossings, zwrapping: %b)" l.zcrossings l.zwrapping;
   pp_custom fmt l (fun fmt addr index tk amount ->
       let index_str = if index = "" then "" else ("."^index) in
-      F.cr (); F.p fmt "%a%s has %d%a" A.pp addr index_str amount pp_token tk)
+      F.cr (); F.p fmt "%a%s has %d %a" A.pp addr index_str amount pp_token tk)
 
 let empty = { map = MP.empty; zcrossings = 0; zwrapping = false}
 
