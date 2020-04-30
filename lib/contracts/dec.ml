@@ -51,54 +51,60 @@ module Admin = struct
   let set_owner pos owner = map_set owners pos owner
 end
 
+
 module User = struct
-  let segment_of        : (A.t,A.t option) code_identifier = code ()
-  (* Start a new tl with 2 positions *)
-  let init_tl           : (string * string * A.t, A.t * A.t) code_identifier = code ()
+  let segment_of        : (A.t,A.t option)                    code_identifier = code ()
+  let new_pos           : (string, A.t)                       code_identifier = code ()
+  let free_singleton    : (A.t,unit)                          code_identifier = code ()
+  let grow_singleton    : (A.t * A.t * string,A.t)            code_identifier = code ()
   (* Transfers *)
   (* Give all tokens owned by address at some index to owner of address *)
-  let collect_token     : (A.t * token, unit) code_identifier = code ()
+  let collect_token     : (A.t * token, unit)                 code_identifier = code ()
   (* Give address1 owned by address2 to owner of address 2 *)
-  let collect_address   : (A.t, unit) code_identifier = code ()
+  let collect_address   : (A.t, unit)                         code_identifier = code ()
   (* Transfer token amount from caller to address *)
-  let transfer_token    : (token * amount * A.t, unit) code_identifier = code ()
+  let transfer_token    : (token * amount * A.t, unit)        code_identifier = code ()
   (* Transfer address from caller to address *)
-  let transfer_address  : (A.t * A.t, unit) code_identifier = code ()
+  let transfer_address  : (A.t * A.t, unit)                   code_identifier = code ()
   (* read info *)
   (* owners of boxes&positions are anything *)
-  let owner_of          : (A.t, A.t) code_identifier = code ()
-  let owner_of_opt      : (A.t, A.t option) code_identifier = code ()
+  let owner_of          : (A.t, A.t)                          code_identifier = code ()
+  let owner_of_opt      : (A.t, A.t option)                   code_identifier = code ()
   (* a position may or may not have a box *)
   (* pos -> prov *)
-  let box_of            : (A.t, A.t option) code_identifier = code ()
+  let box_of            : (A.t, A.t option)                   code_identifier = code ()
   (* any -> ... *)
 
-  let balance_of        : (A.t * token, amount) code_identifier = code ()
+  let balance_of        : (A.t * token, amount)               code_identifier = code ()
   (* Convenience composition of right_prov and get_balance *)
   (* convenience *)
-  let box_balance_of    : (A.t * token, amount) code_identifier = code ()
-  let fund_with_token   : (token * amount * pos * side,unit) code_identifier = code ()
-  let fund_with_address : (A.t * pos * side,unit) code_identifier = code ()
-  let next_of :           (A.t, A.t option) code_identifier = code ()
+  let box_balance_of    : (A.t * token, amount)               code_identifier = code ()
+  let fund_with_token   : (token * amount * pos * side,unit)  code_identifier = code ()
+  let fund_with_address : (A.t * pos * side,unit)             code_identifier = code ()
+  let next_of           : (A.t, A.t option)                   code_identifier = code ()
+  let is_pos            : (A.t,bool)                          code_identifier = code ()
+  let is_origin         : (A.t,bool)                          code_identifier = code ()
+  let is_end            : (A.t,bool)                          code_identifier = code ()
+  let is_singleton      : (A.t,bool)                          code_identifier = code ()
 
-  let new_pos s =
+  let _new_pos s =
     let pos     = create_empty_contract s in
     let pos_box = create_empty_contract (s^".box") in
     map_set nexts pos pos_box ;
-    (pos,pos_box)
+    pos
 
-  let is_pos p =
-    match map_find nexts p with
-    | None -> false
-    | Some b -> match map_find segments b with
-      | Some _ -> true
-      | None -> match map_find nexts b with
-        | None -> false
-        | Some p' -> match map_find nexts p' with
-          | None -> false
-          | Some b' -> match map_find segments b' with
-            | Some _ -> true
-            | None -> false
+  let _grow from contract pos_name owner =
+    let from_box = map_find_exn nexts from in
+    match map_find nexts from_box with
+    | Some _ ->
+      error "Cannot grow a non-head of tradeline"
+    | None ->
+      let pos = _new_pos pos_name in
+      map_set owners pos owner ;
+      map_set nexts from_box pos ;
+      map_set segments (map_find_exn nexts pos) contract ;
+      pos
+
 
   let construct () =
     (* Dec *)
@@ -119,25 +125,61 @@ module User = struct
           map_find segments pos_box
     end;
 
-  (*let box_of            : (A.t, A.t option) code_identifier = code ()*)
+    (*let box_of            : (A.t, A.t option) code_identifier = code ()*)
     code_set box_of begin fun p ->
-      if is_pos p then
+      if callthis is_pos p then
         Some (map_find_exn nexts p)
       else
         None
     end;
 
-    code_set init_tl
-      begin fun (source_name,target_name,contract) ->
-        let owner = get_caller () in
-        let (source,source_box) = new_pos source_name in
-        let (target,target_box) = new_pos target_name in
-        Admin.set_owner source owner ;
-        Admin.set_owner target owner ;
-        map_set nexts source_box target ;
-        map_set segments target_box contract ;
-        (source,target)
-      end ;
+    code_set new_pos
+      begin fun s ->
+        let p = _new_pos s in
+        map_set owners p (get_caller ()) ;
+        p
+      end;
+
+    code_set is_pos
+      begin fun p ->
+        match map_find nexts p with
+        | None -> false (* pos always has next *)
+        | Some b -> match map_find nexts b with
+          | None -> true (* only origin pos has a single next *)
+          | Some p' -> match map_find segments p' with
+            | None -> true (* next(next(box)) always has segment, pos never *)
+            | Some _ -> false
+      end;
+
+    code_set is_origin
+      begin fun p ->
+        let no_next_segment p = match map_find nexts p with
+          | None -> false
+          | Some b -> match map_find segments b with
+            | Some _ -> false
+            | None -> true in
+        callthis is_pos p && no_next_segment p
+      end;
+
+    code_set is_end
+      begin fun p ->
+        match map_find nexts p with
+        | None -> false
+        | Some b -> match map_find nexts b with
+          | None -> true
+          | Some _ -> false
+      end;
+
+    code_set is_singleton
+      begin fun p ->
+        callthis is_origin p && callthis is_end p
+      end;
+
+    code_set grow_singleton
+      begin fun (from,contract,pos_name) ->
+        require (callthis is_singleton from);
+        _grow from contract pos_name (get_caller ())
+      end;
 
 
     code_set transfer_token
@@ -204,6 +246,16 @@ module User = struct
         Admin.transfer_address addr taker
       end ;
 
+    code_set free_singleton
+      begin fun pos ->
+        require (callthis is_singleton pos);
+        require (get_caller () = map_find_exn owners pos);
+        let box = map_find_exn nexts pos in
+        let owner = map_find_exn owners pos in
+        map_set owners box owner;
+        map_remove nexts pos
+      end ;
+
     code_set owner_of
       begin fun p ->
         map_find_exn owners p
@@ -227,7 +279,7 @@ module User = struct
 
     code_set next_of
       begin fun p ->
-        require (is_pos p || test_collectable p);
+        require (callthis is_pos p || test_collectable p);
         if test_collectable p then None else
         let b = map_find_exn nexts p in
         map_find nexts b
@@ -236,7 +288,7 @@ end
 (* Contract will be imported into Dec *)
 module Legal = struct
   (* Extend a tl *)
-  let grow             : (parties * string * A.t * A.t, pos) code_identifier = code ()
+  let grow             : (parties * A.t * string * A.t, pos) code_identifier = code ()
   (* Backward reduce *)
   let pull             : (parties, unit) code_identifier = code ()
   (* Forward reduce *)
@@ -261,27 +313,10 @@ module Legal = struct
         else () in
 
     code_set grow
-      begin fun ((source,target),pos_name,owner,contract) ->
+      begin fun ((source,target),contract,pos_name,owner) ->
         require_legal (source,target) ;
-        let target_box = map_find_exn nexts target in
-        match map_find nexts target_box with
-        | Some _ ->
-          error "Cannot grow a non-head of tradeline"
-        | None ->
-          let (pos,pos_box) = User.new_pos pos_name in
-          map_set owners pos owner ;
-          map_set nexts target_box pos ;
-          map_set segments pos_box contract ;
-          pos
+        User._grow target contract pos_name owner
       end ;
-
-    let clean_singleton pos =
-      let box = map_find_exn nexts pos in
-      match map_find segments box with
-      | Some _ -> ()
-      | None ->
-        map_remove nexts pos ;
-        map_set owners box (map_find_exn owners pos) in
 
     code_set pull
       begin fun (source,target) ->
@@ -301,7 +336,6 @@ module Legal = struct
         map_remove segments target_box ;
         let target_owner = map_find_exn owners target in
         map_set owners target_box target_owner;
-        clean_singleton source
       end ;
 
     code_set commit
@@ -317,10 +351,11 @@ module Legal = struct
             map_remove segments target_box) ;
         map_remove nexts source_box ;
         map_remove nexts target ;
+        let target_owner = map_find_exn owners target in
+        map_set owners source target_owner ;
         map_set nexts source target_box ;
         let source_owner = map_find_exn owners source in
         map_set owners source_box source_owner ;
-        clean_singleton source
       end ;
 
     code_set transfer_token

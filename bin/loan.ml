@@ -51,8 +51,9 @@ let () =
     let loan1 =
       C.tx_create alice "loan1" (Loan.construct dec ~time:10 ~price:(dollar,20)) () in
 
-    let (u,v) = C.tx_with_return alice dec Dec.User.init_tl ("u","v",loan1) in
+    let u = C.tx_with_return alice dec Dec.User.new_pos "u" in
 
+    let v = C.tx_with_return alice dec Dec.User.grow_singleton (u,loan1,"v") in
 
     (* alice injects 100 google and 5 dollars in its Dec account *)
     C.tx alice google Token.transfer (100,dec) ;

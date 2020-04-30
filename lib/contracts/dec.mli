@@ -24,14 +24,14 @@ type parties = A.t*A.t
 
 module Legal : sig
   (* Extend a tl *)
-  val grow             : (parties * string * A.t * A.t, pos) code_identifier
+  val grow             : (parties * A.t * string * A.t, pos)          code_identifier
   (* Backward reduce *)
-  val pull             : (parties, unit) code_identifier
+  val pull             : (parties, unit)                              code_identifier
   (* Forward reduce *)
-  val commit           : (parties, unit) code_identifier
+  val commit           : (parties, unit)                              code_identifier
   (* Send tokens from left or right ledger to address *)
   val transfer_token   : (parties * side * token * amount * A.t,unit) code_identifier
-  val transfer_address : (parties * side * A.t * A.t,unit) code_identifier
+  val transfer_address : (parties * side * A.t * A.t,unit)            code_identifier
 end
 
 module Zwrap : sig
@@ -56,31 +56,26 @@ module Zwrap : sig
 end
 
 module User : sig
-  (* Start a new tl with 2 positions *)
-  val init_tl          : (string * string * A.t, A.t * A.t) code_identifier
-  (* Transfers *)
-  val collect_token    : (A.t * token, unit) code_identifier
-  val collect_address  : (A.t, unit) code_identifier
-  (*val collect_box      : (A.t, unit) code_identifier*)
-  val transfer_token   : (token * amount * A.t, unit) code_identifier
-  val transfer_address : (A.t * A.t, unit) code_identifier
-  (* UNSAFE *)
-  (*val pay              : (parties * side * token * amount * A.t,unit) code_identifier*)
-  (* read info *)
-  (* owners of boxes&positions are anything *)
-  val owner_of         : (A.t, A.t) code_identifier
-  val owner_of_opt     : (A.t, A.t option) code_identifier
-  (* a position may or may not have a box *)
-  (* pos -> prov *)
-  val box_of           : (A.t, A.t option) code_identifier
-  (* any -> ... *)
-  val balance_of       : (A.t * token, amount) code_identifier
-  (* Convenience composition of right_prov and get_balance *)
-  val box_balance_of   : (A.t * token, amount) code_identifier
-  val fund_with_token  : (token * amount * pos * side,unit) code_identifier
-  val fund_with_address : (A.t * pos * side,unit) code_identifier
-  val next_of :           (A.t, A.t option) code_identifier
-  val segment_of        : (A.t,A.t option) code_identifier
+  val new_pos           : (string, A.t)                      code_identifier
+  val free_singleton    : (A.t,unit)                         code_identifier
+  val grow_singleton    : (A.t * A.t * string, A.t)          code_identifier
+  val collect_token     : (A.t * token, unit)                code_identifier
+  val collect_address   : (A.t, unit)                        code_identifier
+  val transfer_token    : (token * amount * A.t, unit)       code_identifier
+  val transfer_address  : (A.t * A.t, unit)                  code_identifier
+  val owner_of          : (A.t, A.t)                         code_identifier
+  val owner_of_opt      : (A.t, A.t option)                  code_identifier
+  val box_of            : (A.t, A.t option)                  code_identifier
+  val balance_of        : (A.t * token, amount)              code_identifier
+  val box_balance_of    : (A.t * token, amount)              code_identifier
+  val fund_with_token   : (token * amount * pos * side,unit) code_identifier
+  val fund_with_address : (A.t * pos * side,unit)            code_identifier
+  val next_of           : (A.t, A.t option)                  code_identifier
+  val segment_of        : (A.t,A.t option)                   code_identifier
+  val is_pos            : (A.t,bool)                         code_identifier
+  val is_origin         : (A.t,bool)                         code_identifier
+  val is_end            : (A.t,bool)                         code_identifier
+  val is_singleton      : (A.t,bool)                         code_identifier
 end
 
 
