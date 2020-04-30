@@ -437,12 +437,12 @@ module Chain = struct
     | (Error _,_) -> None
 
   (* User sends a transactions *)
-  let tx_with_return user address code_identifier args =
+  let txr user address code_identifier args =
     require_admin_s "tx_user" >> fun (state ,context) ->
     (call address code_identifier args) (state,{context with this=user})
 
   let tx user address code_identifier args (state,context) =
-    match tx_with_return user address code_identifier args (state,context) with
+    match txr user address code_identifier args (state,context) with
     | (Ok _, new_state) -> (Ok (), new_state)
     | (Error (v,c,callstack),_) ->
         let sf = Format.std_formatter in
@@ -632,8 +632,8 @@ module Imp = struct
 
     let tx user address code_identifier args = imp @@ FC.tx user address code_identifier args
 
-    let tx_with_return user address code_identifier args =
-      imp @@ FC.tx_with_return user address code_identifier args
+    let txr user address code_identifier args =
+      imp @@ FC.txr user address code_identifier args
 
     let tx_create user name t args = imp @@ FC.tx_create user name (unimp t) args
 

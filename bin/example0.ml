@@ -80,18 +80,18 @@ let () =
   C.echo "║
 ║ We can also directly get alice's current balance to use it in further
 ║ transactions.  In our setting, this means originating a special
-║ `C.tx_with_return` which returns whatever value the contract call returns.
+║ `C.txr` which returns whatever value the contract call returns.
 ║ `C.tx` ignores that return value.  Note that an error encountered during
-║ `C.tx_with_return` will interrupt the flow of transactions.
+║ `C.txr` will interrupt the flow of transactions.
 ║
 ║ We assign alice's balance to a local variable with the following let ... in :
 ║
-║   ┌──────────────────────────────────────────────────────────────────────────┐
-║   │ let alice_balance = C.tx_with_return alice dollar Token.balance alice in │
-║   └──────────────────────────────────────────────────────────────────────────┘
+║   ┌───────────────────────────────────────────────────────────────┐
+║   │ let alice_balance = C.txr alice dollar Token.balance alice in │
+║   └───────────────────────────────────────────────────────────────┘
 ";
 
-  let alice_balance = C.tx_with_return alice dollar Token.balance alice in
+  let alice_balance = C.txr alice dollar Token.balance alice in
 
   C.echo ("║ Alice now has: "^(string_of_int alice_balance)^" dollars");
   C.echo "║ (The above line was evaluated at runtime using the variable `alice_balance`)

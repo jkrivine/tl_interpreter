@@ -152,7 +152,7 @@ module type Chain = sig
   val tx : Address.t -> Address.t -> ('a,'b) code_identifier -> 'a -> unit st
 
   (* User sends a transactions. Pass along return value. Bubble up an exception in case of error. *)
-  val tx_with_return : Address.t -> Address.t -> ('a,'b) code_identifier -> 'a -> 'b st
+  val txr : Address.t -> Address.t -> ('a,'b) code_identifier -> 'a -> 'b st
 
   (* User sends a contract creation transaction *)
   (* In ethereum, this is just a normal tx but with address 0 as destination *)
