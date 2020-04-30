@@ -66,15 +66,12 @@ let () =
     C.tx alice dec Dec.User.transfer_token (google,100,u) ;
 
     (* Trade pos for dollar *)
-    (* 1. bob gives $18 to alice *)
-    C.tx bob dec Dec.User.transfer_token (dollar,18,alice) ;
-    (* 2. alice gives v to bob *)
-    C.tx alice dec Dec.User.transfer_address (v,bob) ;
+    C.tx alice dec Dec.Exchange.make_ask (v,dollar,18) ;
+    C.tx bob dec Dec.Exchange.take_ask (v,dollar,18) ;
     C.echo "Loan was established" ;
 
     C.echo_env () ;
     C.state_save "loan" ;
-    (*let (module U) = Unroll.make dec in*)
     Unroll.payoffs dec u ~times:[(u,loan1,v,Unroll.Commit,11)] ~from:"pre-loan";
     ignore (fun () ->
     (* -- loan is setup, now exploring 2 possible scenarios -- *)

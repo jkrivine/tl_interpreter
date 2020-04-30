@@ -83,5 +83,15 @@ module User : sig
   val segment_of        : (A.t,A.t option) code_identifier
 end
 
+
+module Exchange : sig
+
+  val make_ask : (A.t * A.t * amount,unit) code_identifier 
+  val take_ask : (A.t * A.t * amount,unit) code_identifier
+
+end
+
+
+
 val echo_dec : unit -> unit
 val construct : unit -> unit

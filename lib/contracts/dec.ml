@@ -402,6 +402,36 @@ module Zwrap = struct
       end
 end
 
+(* A very simple pseudo-exchange, trading addresses for tokens. Addresses must
+   be ownable through Dec. There is no protection against ephemeral offers. A
+   pos transfer is the same a rescinding an offer. The address owner must post
+   an ask first, then the buyer can take the ask. There are no bids. *)
+module Exchange = struct
+
+  let make_ask = code ()
+  let take_ask = code ()
+
+  let asks = data ~pp:(MP.pp A.pp (F.pp_3 A.pp A.pp F.pp_int)) "asks"
+
+  let construct () =
+    data_set asks MP.empty;
+
+    code_set make_ask (fun (address,tk,price) ->
+        require (callthis User.owner_of address = get_caller ());
+        map_set asks address (get_caller (),tk,price)
+      );
+
+    code_set take_ask (fun (address,token',price') ->
+        (* Must check owner or ask still stands after transfer *)
+        let (presumed_owner,token,price) = map_find_exn asks address in
+        require (token = token' && price' >= price);
+        Admin.transfer_token_from (get_caller ()) token price (callthis User.owner_of address);
+        Admin.transfer_address_from presumed_owner address (get_caller ());
+        map_remove asks address
+      )
+end
+
+
 let construct () =
   data_set ledger Ledger.empty ;
   data_set owners MP.empty ;
@@ -411,6 +441,7 @@ let construct () =
   Legal.construct () ;
   Zwrap.construct () ;
   User.construct () ;
+  Exchange.construct () ;
 
   (* Callbacks *)
   code_set Token.on_token_receive @@
