@@ -2,6 +2,7 @@
  (libraries lib)
  (names 
   loan 
+reloan
 unroll_test
   example0
   example1 
