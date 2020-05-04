@@ -218,7 +218,12 @@ module Program = struct
     else
       (Error ("Cannot declare private code outside of constructor",context,Printexc.get_callstack 10), state)
 
-  let data ?pp name = HM.Key.create {name;pp;hidden=false}
+  let data ?pp ?show name =
+    let pp = match show with
+    | None -> pp
+    | Some s -> Some (fun fmt a -> Format.pp_print_string fmt (s a)) in
+    HM.Key.create {name;pp;hidden=false}
+
   let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true}
 
   let data_set (data_identifier: 'a data_identifier) (v:'a) = set_in_hmap data_identifier v
@@ -542,6 +547,8 @@ module Imp = struct
     let code_private code = imp @@ FP.code_private (unimp code)
 
     let data = FP.data
+
+    let data_hidden = FP.data_hidden
 
     let data_set data_identifier v = imp @@ FP.data_set data_identifier v
 

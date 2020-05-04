@@ -72,7 +72,7 @@ let () =
 
     C.echo_env () ;
     C.state_save "loan" ;
-    Unroll.payoffs dec u ~times:[(loan1,Unroll.Commit,11)] ~from:"pre-loan";
+    Unroll.payoffs ~times:[(loan1,Unroll.Commit,11)] ~from:"pre-loan" dec u ;
     ignore (fun () ->
     (* -- loan is setup, now exploring 2 possible scenarios -- *)
 

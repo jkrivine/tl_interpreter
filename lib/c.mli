@@ -55,9 +55,9 @@ module type Program = sig
 
 
   (* Initialize a new key for data *)
-  val data : ?pp:(Format.formatter -> 'a -> unit) -> string -> 'a data_identifier
+  val data : ?pp:(Format.formatter -> 'a -> unit) -> ?show:('a -> string) -> string -> 'a data_identifier
   (* Initialize a new key which will not show when printing current stat e*)
-  (*val data_hidden : ?init:'a -> unit -> 'a data_identifier*)
+  val data_hidden : unit -> 'a data_identifier
 
   val data_set : 'a data_identifier -> 'a -> unit st
 

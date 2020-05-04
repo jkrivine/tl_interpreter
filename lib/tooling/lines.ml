@@ -78,18 +78,10 @@ let rec lengths_flush strings =
     | [] -> [0] in
   0::(recurse strings)
 
-(* Diagonal symmetry for list of lists *)
-let rec diagonal lists =
-  let rec recurse cur rest = function
-    | (x::xs)::ls -> recurse (x::cur) (xs::rest) ls
-    | [] -> cur :: (diagonal rest)
-    | []::ls -> []
-  in recurse [] [] lists
-
 (* max_lengths [l1;...;ln] = [max [l1(1);...;ln(1)];...; max [l1(n);...;ln(n)]] *)
 let max_lengths lengths =
   let ff = fun l -> List.fold_left max 0 l in
-  let diag = diagonal lengths in
+  let diag = Base.List.transpose_exn lengths in
   List.map ff diag
 
 (* Basic printing *)

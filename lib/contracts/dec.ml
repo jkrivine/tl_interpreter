@@ -8,6 +8,7 @@ module SP = SP
 module A = Address
 
 type amount = int
+[@@deriving show]
 
 type token = A.t
 [@@deriving show]
@@ -26,6 +27,10 @@ let ledger   = data ~pp:Ledger.pp         "ledger"
 let owners   = data ~pp:(MP.pp A.pp A.pp) "owners"
 let nexts    = data ~pp:(MP.pp A.pp A.pp) "nexts"
 let segments = data ~pp:(MP.pp A.pp A.pp) "segments"
+(* Only here for of offchain use. Offchain readers should be able to maintain this data *)
+(* Internal code should not rely on it *)
+let origins = data_hidden ()
+
 (* Positions have two 'boxes', a forward one and a backward one.
    The backward one is tied to the position itself. It cannot be detached.
    The forward one is called its 'box'.
@@ -36,6 +41,8 @@ let segments = data ~pp:(MP.pp A.pp A.pp) "segments"
 (* This is just a module to separate admin code that
    should not be called from the outside *)
 module Admin = struct
+
+
   let transfer_token_from giver tk a taker =
     Ledger.transfer ledger giver tk a taker
 
@@ -90,7 +97,9 @@ module User = struct
   let _new_pos s =
     let pos     = create_empty_contract s in
     let pos_box = create_empty_contract (s^".box") in
-    map_set nexts pos pos_box ;
+    map_set origins pos pos;
+    map_set origins pos_box pos;
+    map_set nexts pos pos_box;
     pos
 
   let _grow from contract pos_name owner =
@@ -101,6 +110,8 @@ module User = struct
     | None ->
       let pos = _new_pos pos_name in
       map_set owners pos owner ;
+      map_set origins pos (map_find_exn origins from_box) ;
+      map_set origins (map_find_exn nexts pos) (map_find_exn origins from_box) ;
       map_set nexts from_box pos ;
       map_set segments (map_find_exn nexts pos) contract ;
       pos
@@ -249,10 +260,9 @@ module User = struct
     code_set free_singleton
       begin fun pos ->
         require (callthis is_singleton pos);
-        require (get_caller () = map_find_exn owners pos);
-        let box = map_find_exn nexts pos in
         let owner = map_find_exn owners pos in
-        map_set owners box owner;
+        require (get_caller () = owner);
+        map_set owners (map_find_exn nexts pos) owner;
         map_remove nexts pos
       end ;
 
@@ -446,7 +456,7 @@ module Exchange = struct
   let make_ask = code ()
   let take_ask = code ()
 
-  let asks = data ~pp:(MP.pp A.pp (F.pp_3 A.pp A.pp F.pp_int)) "asks"
+  let asks = data ~show:([%show: (A.t, A.t*token*amount) MP.t]) "asks"
 
   let construct () =
     data_set asks MP.empty;
@@ -466,12 +476,12 @@ module Exchange = struct
       )
 end
 
-
 let construct () =
   data_set ledger Ledger.empty ;
   data_set owners MP.empty ;
   data_set nexts MP.empty ;
   data_set segments MP.empty ;
+  data_set origins MP.empty ;
 
   Legal.construct () ;
   Zwrap.construct () ;

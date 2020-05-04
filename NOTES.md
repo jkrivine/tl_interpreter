@@ -1,3 +1,21 @@
+# 3/5/20
+
+Idea for new internal structure. "position" is a pair of _legs_ (formerly box). Both legs are owner by someone (note that means legs can be separated). There is a wrapper function `transfer_position` which always transfers both legs at the same time.
+
+Why? Because currently I have the following issues : suppose a pos becomes a singleton. The attached box cannot be collected immediately because unlike with a pulled/committed pos, there is no automatic operation to detach the box and give it an owner. So I need a `free_singleton` command.
+But now it means I need an additional call whenever a position happens to be the last. And if I test for singleton and free the pos automatically, it means that there is a discrepancy :
+if `u --- v --- w` and v pulls, I get to `u --- v`, and v can regrow
+if `v --- w` and v pulls, now v is singleton. If I free it, it cannot regrow. This is not uniform behavior.
+
+One way to make it all uniform is to _partially free_, by saying ok, if
+`u --- v --- w` and v pulls, I get to `u --- v` and now _v.box is freed_, because it isn't slave to any segment.
+Similarly at any point in time the origin if a tradeline has a "free" position in the sense that its possessions are collectable.
+
+Now automatically the case `v --- w`, v pulls, v means that v is free (it already was) and v's box becomes free (coherent with the general case where someone is on the left of v).
+
+The only way I see how to implement the above is by having 2 legs and direct ownership. The `collectable pos` is true iff pos is leftmost, and `collectable box` is true iff box is rightmost.
+
+
 # 20/4/20
 For the imperative/monadic versions, it *is* possible to have them all be exactly the same implementation.
 

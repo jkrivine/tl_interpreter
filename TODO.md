@@ -1,4 +1,7 @@
 # TODO
+
+
+
 * coarse-grained undo for command-line use. when should an operation generate a new undo step?
 * print/parse tradeline
 

@@ -8,6 +8,7 @@ type token = A.t
 [@@deriving show]
 
 type amount = int
+[@@deriving show]
 
 type pos = A.t
 
@@ -19,6 +20,7 @@ type side = Source | Target
 
 val ledger   : Ledger.t data_identifier
 val owners   : (pos,pos) MP.t data_identifier
+val origins : (pos,pos) MP.t data_identifier
 
 type parties = A.t*A.t
 

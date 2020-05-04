@@ -77,11 +77,15 @@ let () =
     C.echo "Loan was established" ;
 
     let loan2 =
-      C.tx_create bob "loan2" (Loan.construct dec ~time:8 ~price:(dollar,18)) () in
+      C.tx_create bob "loan2" (Loan.construct dec ~time:12 ~price:(dollar,18)) () in
 
-    let w = C.txr  bob loan1 Segment.grow ((u,v),loan2,"w") in
+    let v' = C.txr bob dec Dec.User.new_pos "v'" in
 
-    C.tx bob dec Dec.Exchange.make_ask (w,dollar,16) ;
+    let w = C.txr bob dec Dec.User.grow_singleton (v',loan2,"w") in
+
+    C.tx bob dec Dec.User.transfer_address (v,v') ;
+
+    C.tx bob   dec Dec.Exchange.make_ask (w,dollar,16) ;
     C.tx carol dec Dec.Exchange.take_ask (w,dollar,16) ;
 
     C.echo_env () ;
