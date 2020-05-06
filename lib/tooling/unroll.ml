@@ -221,7 +221,7 @@ module Make(D:sig val d : Address.t end) = struct
         P.echo "═════════════════════════════";
           List.iter (fun arg ->
           crawl' times arg;
-          if compact then begin
+          if not compact then begin
             P.echo_pp "After move %s\n%s" ([%show: dir*A.t*A.t*A.t] arg)
 
             ("Current tradeline state\n"^
