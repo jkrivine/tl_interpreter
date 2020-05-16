@@ -1,7 +1,10 @@
 (* Warning! The code below is super ugly. You probably want to wait until it
    has been cleaned it up before reading it. *)
 
-open Imperative
+open Env.Imp
+module P = Program
+module C = Chain
+
 type dir = Pull | Commit
 [@@deriving show { with_path = false }]
 
@@ -9,16 +12,16 @@ type dir = Pull | Commit
 
 module Make(D:sig val d : Address.t end) = struct
   let dec = D.d
-  open P
+  open Program
   open Dec.User
 
   module Contractions = struct
 
     (*type t = (dir*int) list*)
-    type t = (dir*A.t*A.t*A.t) list
+    type t = (dir*Address.t*Address.t*Address.t) list
     [@@deriving show]
 
-    type r = (A.t*A.t*A.t) list list
+    type r = (Address.t*Address.t*Address.t) list list
     [@@deriving show]
 
     let iter tls callback =
@@ -59,7 +62,7 @@ module Make(D:sig val d : Address.t end) = struct
   let orig c = proxy dec (fun () -> map_find_exn Dec.origins c)
   let orig_opt c = proxy dec (fun () -> map_find Dec.origins c)
 
-   let rec triples_tl ?f pos =
+   let triples_tl ?f pos =
      let rec recurse pos =
        (match f with None -> () | Some f -> f pos);
        match call dec next_of pos with
@@ -68,7 +71,7 @@ module Make(D:sig val d : Address.t end) = struct
          in h::(recurse pos') in
    recurse pos
 
-  let rec triples_tls' poss =
+  let triples_tls' poss =
 
     let retval = ref []
     and pending = ref (List.map (fun p -> orig p) poss)
@@ -101,7 +104,7 @@ module Make(D:sig val d : Address.t end) = struct
     List.map (fun (_,l) -> l) (triples_tls' poss)
 
 
-  let rec traverse pos seen =
+  let traverse pos seen =
 
 
     let rec t' pos = match call dec next_of pos with
@@ -131,7 +134,7 @@ module Make(D:sig val d : Address.t end) = struct
   let segments_tl pos = List.map (fun (_,s,_) -> s) (triples_tl pos)
 
   let show_tradelines poss =
-    let to_s l = List.map Address.to_string l in
+    let to_s l = List.map Address.show l in
     String.concat "\n" (List.map (fun (o,_) ->
     Lines.from_strings (to_s (owners_tl o)) (to_s (trail_tl o)) (to_s (segments_tl o))
       ) (triples_tls' poss))
@@ -151,7 +154,32 @@ module Make(D:sig val d : Address.t end) = struct
         )
       | None -> ()
     end;
-    call s ident (u,v);
+    let time = P.time_get () in
+
+    let rec try_call t =
+      if t < 1000 then (
+        let prev_time = P.time_get () in
+        C.time_set t;
+        call s ident (u,v);
+        (*P.echo "************************";*)
+        (*P.echo_state ();*)
+        (* A way of checking if a reduction occured *)
+        if call dec Dec.User.box_of v = None then begin
+          (if t <> prev_time then P.echo_pp "Setting time to %i\n" t);
+        end else (
+          C.state_restore "try_call";
+          try_call (t+1)
+        )
+      ) else (
+        P.echo_pp "Cannot reduce with %i <= time < 1000.\n" time;
+          P.error "cannot find good time split"
+      ) in
+
+    C.state_save "try_call";
+    try_call time ;
+
+
+    (*call s ident (u,v);*)
     if call dec Dec.User.is_singleton u then
     let owner = call dec owner_of u in
     C.tx owner dec free_singleton u;
@@ -202,7 +230,6 @@ module Make(D:sig val d : Address.t end) = struct
   let unroll ?(compact=false) ?(times=[]) ~from poss =
     let origs = List.map (fun (o,_) -> o) (triples_tls' poss) in
     call dec Dec.Zwrap.enable ();
-    let index_adjust = function Commit -> 1 | Pull -> 0 in
     C.state_save "before_unroll";
     C.state_restore from;
     let ledger' = P.proxy dec (fun () -> P.data_get Dec.ledger) in
@@ -215,14 +242,14 @@ module Make(D:sig val d : Address.t end) = struct
     let t_tls = triples_tls origs in
     Contractions.iter t_tls (fun contractions ->
         let players = List.filter (fun o -> orig_opt o = None) (owners_tls origs) in
-        let moves = ref [] in
         (* Iterate on each reduction *)
+        (*P.echo_state ();*)
         P.echo_pp "Playing sequence: %s\n" (Contractions.show contractions);
         P.echo "═════════════════════════════";
           List.iter (fun arg ->
           crawl' times arg;
           if not compact then begin
-            P.echo_pp "After move %s\n%s" ([%show: dir*A.t*A.t*A.t] arg)
+            P.echo_pp "After move %s\n%s" ([%show: dir*Address.t*Address.t*Address.t] arg)
 
             ("Current tradeline state\n"^
              "───────────────────────\n"^
@@ -233,7 +260,7 @@ module Make(D:sig val d : Address.t end) = struct
         P.proxy dec (fun () ->
             let ledgerk' = P.data "ledger'" in
             P.data_set ledgerk' ledger';
-            Ledger.Offchain.restrict Dec.ledger (fun o m -> List.mem o players);
+            Ledger.Offchain.restrict Dec.ledger (fun o _m -> List.mem o players);
             Ledger.Offchain.update Dec.ledger
               (fun (o,index,t) a -> a - Ledger.balance ledgerk' o ~index t)
           );

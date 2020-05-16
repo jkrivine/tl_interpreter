@@ -1,4 +1,4 @@
-open Imperative.P
+open Env.Imp.Program
 (** Syntactic sugar *)
 module A = Address
 

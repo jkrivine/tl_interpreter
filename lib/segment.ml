@@ -1,4 +1,4 @@
-open Imperative.P
+open Env.Imp.Program
 
 (* To be implement by inheritors *)
 let commit : (Dec.parties,unit) code_identifier = code ()

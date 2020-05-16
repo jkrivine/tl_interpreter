@@ -391,7 +391,7 @@ module Program = struct
     let echo_pp s = Format.kfprintf (fun _ -> return ()) Format.std_formatter s
 
     let echo_address a =
-      echo (Address.to_string a)
+      echo (Address.show a)
 
     let echo_trace (state,context) =
         (return (F.p Format.std_formatter "%s"

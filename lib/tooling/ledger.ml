@@ -1,6 +1,6 @@
 open Tools
 (** Syntactic sugar *)
-open Imperative.P
+open Env.Imp.Program
 module MP = MP
 module SP = SP
 module A = Address

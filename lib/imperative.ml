@@ -3,3 +3,4 @@
 module A = Address
 module P = Env.Imp.Program
 module C = Env.Imp.Chain
+module Sandbox = Sandbox.Make

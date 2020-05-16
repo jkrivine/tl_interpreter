@@ -1,4 +1,4 @@
-open Imperative.P
+open Env.Imp.Program
 (** Syntactic sugar *)
 module MP = MP
 module SP = SP
@@ -67,6 +67,7 @@ module User : sig
   val transfer_address  : (A.t * A.t, unit)                  code_identifier
   val owner_of          : (A.t, A.t)                         code_identifier
   val owner_of_opt      : (A.t, A.t option)                  code_identifier
+  val master_of         : (A.t, A.t)                         code_identifier
   val box_of            : (A.t, A.t option)                  code_identifier
   val balance_of        : (A.t * token, amount)              code_identifier
   val box_balance_of    : (A.t * token, amount)              code_identifier

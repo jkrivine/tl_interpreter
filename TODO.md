@@ -1,4 +1,7 @@
 # TODO
+* one implementation for imperative/monadic
+* fix F.P/echo/pp mess, in particular try to use %show everywhere
+* use phantom/gadt for positions,boxes,etc
 
 
 

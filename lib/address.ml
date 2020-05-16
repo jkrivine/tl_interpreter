@@ -12,7 +12,7 @@ let next s =
   incr counter; ret
 
 let admin = next "<admin>"
-let to_string a =
+let show a =
   let open Format in
   ignore (flush_str_formatter ());
   pp str_formatter a;

@@ -1,5 +1,5 @@
 open Tools
-open Imperative.P
+open Env.Imp.Program
 
 let balances = data ~pp:(MP.pp Address.pp Format.pp_print_int) "balances"
 let owner = data ~pp:Address.pp "owner"

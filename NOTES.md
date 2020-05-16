@@ -1,3 +1,33 @@
+# 7/5/20
+## Why is box pointing to to the left segment?
+The reason why I put the 'segment' link on the box of the target pos (instead of the target pos itself) is I think to have a way of knowing whether an address is part of a tradeline without an additional map/set. When I did this, singleton pos+box did not exist (you created a tl of length 1 immediately, and pos+box as dismantled after the last reduce/commit). So the box of the head of a tl had no mapping at all, so you didn't know if it was part of the tl or not. A 'source' (or 'origin') mapping would have solved the issue. I decided to let boxes point to the left segment, that way the head always points to the something.
+
+Currently I have decided to init tls with a singleton pos+box. In that case the box has no mapping at all.
+
+I could
+* have a special "initial" segment. But anyone else could point to it...
+* go back to the previous version
+* use the 'origin' mapping (currently doing this)
+* add a 'pos' mapping, which is just a box->pos backward arrow
+
+## master_of, owner_of
+The problem is: if segment `s` between `p` and `p'` receives an order to reduce and wants to validate that the caller is authorized, how does `s` do it?
+
+`caller = owner_of p` is not sufficient because `p` may be owned by position `q`. positions are not contracts so they cannot call (positions are not contract because we don't want to pay for contract creation all the time. We could have a 'contract pool' that gets reused? Sounds horrible). 
+
+So we introduce an additional concept, `master_of`.
+
+If `a` is a pos in a tl with a segment, `master_of a = segment_of a`
+If `a` is a pos in a tl without a segment but an owner, `master_of a = owner_of a`
+Otherwise, `master_of a = a`. This applies to users and regular contracts.
+
+Now, all `s` has to do is check `caller = master_of (owner_of p)`
+
+Note that this is a bit hackish and I'm still looking for a cleaner architecture. Ideally :
+* `owner_of` never throws
+* ` master_of` never throws
+* there are no edge cases such as the pos of an iniitial pos+box, or the box of a final pos+box. In the latter case, master_of returns the box itself, instead of the user!
+
 # 3/5/20
 
 Idea for new internal structure. "position" is a pair of _legs_ (formerly box). Both legs are owner by someone (note that means legs can be separated). There is a wrapper function `transfer_position` which always transfers both legs at the same time.

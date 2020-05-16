@@ -1,5 +1,5 @@
 open Tools
-open Imperative.P
+open Env.Imp.Program
 
 
 (** Syntactic sugar *)
@@ -77,6 +77,7 @@ module User = struct
   (* owners of boxes&positions are anything *)
   let owner_of          : (A.t, A.t)                          code_identifier = code ()
   let owner_of_opt      : (A.t, A.t option)                   code_identifier = code ()
+  let master_of         : (A.t, A.t)                          code_identifier = code ()
   (* a position may or may not have a box *)
   (* pos -> prov *)
   let box_of            : (A.t, A.t option)                   code_identifier = code ()
@@ -189,6 +190,7 @@ module User = struct
     code_set grow_singleton
       begin fun (from,contract,pos_name) ->
         require (callthis is_singleton from);
+        require (get_caller () = map_find_exn owners from);
         _grow from contract pos_name (get_caller ())
       end;
 
@@ -275,6 +277,16 @@ module User = struct
       begin fun p ->
         map_find owners p
       end ;
+
+    code_set master_of
+      begin fun p ->
+        match callthis segment_of p with
+        | None -> (match callthis owner_of_opt p with
+            | None -> p
+            | Some o -> o)
+        | Some s -> s
+      end ;
+
 
     code_set balance_of
       begin fun (a,tk) ->
