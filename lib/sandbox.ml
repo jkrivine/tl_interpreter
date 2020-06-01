@@ -31,17 +31,32 @@ module Make () = struct
 
   let dec   = P.create_contract "dec"    Dec.construct   ()
 
+  let owner pos =
+    if P.call dec Dec.User.is_pos pos then
+    P.call dec Dec.User.owner_of pos
+    else
+      P.error "sandbox.owner: not a position"
+
   let box p = Option.get @@ P.call dec Dec.User.box_of p
 
   let init who pos_name =
     C.txr who dec Dec.User.new_pos pos_name
 
   let prev pos =
-    let source = P.proxy dec (fun () -> P.map_find_exn Dec.origins pos) in
-    let rec k p =
-      let p' = Option.get @@ P.call dec Dec.User.next_of p in
-      if p' = pos then p else k p'
-    in k source
+    if P.call dec Dec.User.is_pos pos then
+      let source = P.proxy dec (fun () -> P.map_find_exn Dec.origins pos) in
+      let rec k p =
+        let p' = Option.get @@ P.call dec Dec.User.next_of p in
+        if p' = pos then p else k p'
+      in k source
+    else
+      P.error "sandbox.prev: not a position"
+
+  let next pos =
+    if P.call dec Dec.User.is_pos pos then
+      Option.get @@ P.call dec Dec.User.next_of pos
+    else
+      P.error "sandbox.next: not a position"
 
   let grow pos segment new_pos_name =
     let owner = P.call dec Dec.User.owner_of pos in

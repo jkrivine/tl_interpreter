@@ -36,8 +36,10 @@ module Make () : sig
   val segment : string -> ?on_connect:(pos->pos -> unit) -> ?pull:(pos->pos->unit) -> ?commit:(pos->pos->unit) -> unit -> contract
   
   (* Utility *)
+  val owner : pos -> user
   val box : pos -> box
   val prev : pos -> pos
+  val next : pos -> pos
 
   (* Functions used inside segments *)
   val first : unit -> bool
