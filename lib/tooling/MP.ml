@@ -17,7 +17,7 @@ let singleton = M.singleton
 let takeout m k = (M.remove m k, M.find m k)
 let change m k f = M.change m k ~f
 let mem m k = M.mem m k
-(*let find m k = M.find m k*)
+let length m = M.length m
 let filter m f = M.filteri m ~f:(fun ~key ~data -> f key data)
 let map m f = M.mapi m ~f:(fun ~key ~data -> f key data)
 (* Print each map entry *)

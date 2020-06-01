@@ -1,0 +1,12 @@
+(executables
+ (libraries lib)
+ (names 
+  reloan_chained
+  reloan_nested
+  long
+  brokering
+ )
+ (modes byte exe)
+ (preprocess (pps ppx_deriving.show))
+ )
+

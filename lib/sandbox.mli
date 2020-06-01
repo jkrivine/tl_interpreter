@@ -32,7 +32,7 @@ module Make () : sig
 
   val give : asset -> Address.t -> unit
 
-  val pay : ?from:Address.t -> asset -> Address.t -> unit
+  val pay : ?from:Address.t -> ?upto:bool -> asset -> Address.t -> unit
 
   val transfer : Address.t -> asset -> Address.t -> unit
 
@@ -43,7 +43,7 @@ module Make () : sig
 
   val reduce : unit -> unit
 
-  val segment : string -> pull:(pos->pos->unit) -> commit:(pos->pos->unit) -> contract
+  val segment : string -> ?on_connect:(pos->pos -> unit) -> ?pull:(pos->pos->unit) -> ?commit:(pos->pos->unit) -> unit -> contract
 
 val swap : Address.t -> asset -> Address.t -> asset -> unit
 
@@ -51,13 +51,26 @@ val set_payoffs_baseline : unit -> unit
 
 val payoffs : compact:bool -> pos -> unit
 
+val fund_left : ?from:Address.t -> asset -> pos -> unit
+val fund_right : ?from:Address.t -> asset -> pos -> unit
+
 val token : string -> token
-val user : string -> user
+val user : ?defaults:bool -> string -> user
+val oracle : (int*int) list -> Address.t
+val consult : Address.t -> int
+val users : string list -> user list
 val google : token
 val euro : token
 val alice : user
 val bob : user
 val carol : user
+
+type 'a chan
+
+val forward_channel : ?accumulate:('a -> 'a -> 'a) -> 'a -> 'a chan
+val read : 'a chan -> 'a
+val write : 'a chan -> 'a -> unit
+val shift : 'a chan -> unit
 end
 
 

@@ -1,4 +1,11 @@
 # TODO
+* "fund" to fund provisions
+* example contract with provision testing
+* expand auto-unroll hinting API
+* documentation for sandbox
+* separate pos manager as an NFT from dec
+* let dec handle NFTs in general
+
 * one implementation for imperative/monadic
 * fix F.P/echo/pp mess, in particular try to use %show everywhere
 * use phantom/gadt for positions,boxes,etc

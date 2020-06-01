@@ -23,6 +23,8 @@ let s s =
 let pfn s =
   Format.kfprintf (fun _ -> ()) Format.std_formatter s
 
+let fs = Format.sprintf
+
 let pp_string = Format.pp_print_string
 let pp_int = Format.pp_print_int
 let pp_bool = Format.pp_print_bool

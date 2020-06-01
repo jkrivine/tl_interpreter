@@ -53,16 +53,16 @@ let spread_flush lengths strings =
   recurse "" ((""::strings),lengths)
 
 (* Show truncated lines of length lengths, except first and last *)
-let rec lines lengths =
+let _make_lines open_ line_ break_ close_ lengths =
   let rec recurse acc prev_line prev_stop = function
     | length::xs ->
       let line,stop = (match xs with
-            _::_::_::_ -> "─","┼"
-          | _::[_] -> "─","┤"
+            _::_::_::_ -> line_, break_
+          | _::[_] -> line_, close_
           | _ -> " ","") in
       recurse (acc^(rp prev_line length)^prev_stop) line stop xs
     | [] -> acc in
-  recurse "" " " "├" lengths
+  recurse "" " " open_ lengths
 
 (* Give best block lengths for strings that want to be between blocks *)
 let rec lengths_inter strings =
@@ -85,23 +85,70 @@ let max_lengths lengths =
   List.map ff diag
 
 (* Basic printing *)
+    (* comma separate ints *)
 let rec s_ls = function
   | x::xs -> (string_of_int x)^", "^(s_ls xs)
   | _ -> ""
 
+(* comma separate strings *)
 let rec ss_ls = function
   | x::xs -> x^", "^(ss_ls xs)
   | _ -> ""
 
+type line_type = Default | LeftArrow | RightArrow
+type line_content = Lines of line_type | Inter of string list | Flush of string list
+
+let make_lines arg len = match arg with
+  | Default -> _make_lines "├" "─" "┼" "┤" len
+  | LeftArrow -> _make_lines "◀" "─" "┼" "┤" len
+  | RightArrow -> _make_lines "├" "─" "┼" "▶" len
+
+
 (* from_strings a b c returns, stacked : a (inter), b (inter), lines, c (flush) *)
+let manual strings =
+  let open List in
+  let pad = map (fun s -> " "^s^" ") in
+  let strings =
+    strings
+    |> map (function
+        | Lines d -> Lines d
+        | Flush s -> Flush (pad s)
+        | Inter s -> Inter (pad s)) in
+  let lengths =
+    strings
+    |> filter_map (function
+        | Lines _ -> None
+        | Flush s -> Some (lengths_flush s)
+        | Inter s -> Some (lengths_inter s))
+    |> max_lengths in
+
+  strings
+  |> map (function
+      | Lines arg -> make_lines arg lengths
+      | Inter s -> spread_inter lengths s
+      | Flush s -> spread_flush lengths s)
+  |> map (function s -> s^"\n")
+  |> String.concat ""
+
 let from_strings users positions segments =
-  let segments = List.map (fun s -> " "^s^" ") segments in
-  let lengths = max_lengths
-      [lengths_inter users; lengths_inter positions; lengths_flush segments] in
-  (spread_inter lengths users)^"\n"^
-  (spread_inter lengths positions)^"\n"^
-  (lines lengths)^"\n"^
-  (spread_flush lengths segments)^"\n"
+  manual [Inter users; Inter positions; Lines Default; Flush segments]
+
+let backward u seg v =
+  manual [Inter [u;v]; Flush ["PULL"]; Lines LeftArrow; Flush [seg]]
+
+let forward u seg v =
+  manual [Inter [u;v]; Flush ["COMMIT"]; Lines RightArrow; Flush [seg]]
+
+(*let from_strings users positions segments =*)
+  (*let mesp = List.map (fun s -> " "^s^" ") in*)
+  (*let segments = mesp segments in*)
+  (*let positions = mesp positions in*)
+  (*let users = mesp users in*)
+  (*let lengths = max_lengths [lengths_inter users; lengths_inter positions; lengths_flush segments] in*)
+  (*(spread_inter lengths users)^"\n"^*)
+  (*(spread_inter lengths positions)^"\n"^*)
+  (*(lines lengths)^"\n"^*)
+  (*(spread_flush lengths segments)^"\n"*)
 
 let test () =
   let inters = ["u";"v";"wakanda"] in
@@ -110,4 +157,4 @@ let test () =
   print_endline (s_ls lengths);
   print_endline ("*"^(spread_inter lengths inters)^"*");
   print_endline ("*"^(spread_flush lengths segments)^"*");
-  print_endline ("*"^(lines lengths)^"*")
+  print_endline ("*"^(make_lines Default lengths)^"*")
