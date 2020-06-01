@@ -202,7 +202,8 @@ module Program = struct
     ite_admin (fun () -> return ()) (fun () -> error ("not admin ("^s^")"))
 
   (* Initialize a new key for code *)
-  let code () = HM.Key.create {name="<code>";pp=None;hidden=true}
+  (* internal means that the code can only be called from other code at the same address. Use `callthis`. *)
+  let code ?(internal=false) () = HM.Key.create {name="<code>";pp=None;hidden=true;internal}
 
   let code_set code_identifier code (state,context) =
     if context.constructor then
@@ -222,9 +223,10 @@ module Program = struct
     let pp = match show with
     | None -> pp
     | Some s -> Some (fun fmt a -> Format.pp_print_string fmt (s a)) in
-    HM.Key.create {name;pp;hidden=false}
+    HM.Key.create {name;pp;hidden=false;internal=false}
 
-  let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true}
+  (* internal doesn't apply to data *)
+  let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true;internal=false}
 
   let data_set (data_identifier: 'a data_identifier) (v:'a) = set_in_hmap data_identifier v
 
@@ -330,9 +332,12 @@ module Program = struct
     ((C.construct args) >>= fun ret -> return (address,ret)) (state',context')
   [@@ocaml.warning "-32"]
 
-  (* Get the code given by `code_identifier` at `address`, run it in *context'` instead
+  (* Get the code given by `code_identifier` at `address`, run it in `context'` instead
      of the current context *)
   let _call context' address code_identifier args (state,context) =
+    if address <> context.this && (HM.Key.info code_identifier).internal then
+      (Error ("Cannot call internal code from another address",context,Printexc.get_callstack 10),state)
+    else
     match _get_in_hmap_option code_identifier address state.hmaps with
     | Some code -> code args (state,context')
     | None -> (Error ("Code not found",context,Printexc.get_callstack 10),state)

@@ -47,7 +47,7 @@ end
 module type Program = sig
   include Monad
   (* Initialize a new key for code *)
-  val code : unit -> ('a,'b) code_identifier
+  val code : ?internal:bool -> unit -> ('a,'b) code_identifier
 
   val code_set : ('a,'b) code_identifier -> ('a -> 'b st) -> unit st
 

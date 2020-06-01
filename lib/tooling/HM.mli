@@ -7,6 +7,7 @@ type 'a key_info = {
   name: string;
   pp: (Format.formatter -> 'a -> unit) option;
   hidden:bool;
+  internal:bool;
 }
 
 (* Redefine Hmaps to work with the key_info type *)
