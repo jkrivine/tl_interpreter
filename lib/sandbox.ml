@@ -69,12 +69,7 @@ module Make () = struct
   let (~$) amount token = Token (token,amount)
   let (~@) pos = Position pos
 
-  let give asset taker =
-    match asset with
-    | Position p ->
-      let o = P.call dec Dec.User.owner_of p in
-      C.tx o dec Dec.User.transfer_address (p,taker)
-    | Token (token,amount) ->
+  let give amount token taker =
       P.call token Token.mint_for (amount,taker)
 
 
@@ -194,8 +189,8 @@ module Make () = struct
     let user = P.create_user name in
     if defaults then begin
 
-      give (~$ 1500 euro) user ;
-      give (~$ 30 google) user ;
+      give 1500 euro user ;
+      give 30 google user ;
 
       send user 200 euro  dec ;
       send user 10 google dec
@@ -302,14 +297,14 @@ module Make () = struct
 
   let () =
     P.call dec Dec.Zwrap.enable ();
-    give (~$ 1500 euro) alice ;
-    give (~$ 40 google) alice ;
+    give 1500 euro alice ;
+    give 40 google alice ;
 
-    give (~$ 1800 euro) bob ;
-    give (~$ 60 google) bob ;
+    give 1800 euro bob ;
+    give 60 google bob ;
 
-    give (~$ 2100 euro) carol ;
-    give (~$ 80 google) carol ;
+    give 2100 euro carol ;
+    give 80 google carol ;
 
     send alice 200 euro  dec ;
     send alice 10 google dec ;

@@ -1,5 +1,12 @@
 module Make () : sig
 
+  (* Type synonyms *)
+  type pos = Address.t
+  type user = Address.t
+  type contract = Address.t
+  type token = Address.t
+  type box = Address.t
+
   (* Resources *)
   val token : string -> token
   val user : ?defaults:bool -> string -> user
@@ -11,19 +18,12 @@ module Make () : sig
   val bob : user
   val carol : user
 
-  (* Type synonyms *)
-  type pos = Address.t
-  type user = Address.t
-  type contract = Address.t
-  type token = Address.t
-  type box = Address.t
-
   (* Moving funds *)
   type asset = Token of Dec.token * Dec.amount | Position of Dec.pos
   val (~$) : int -> token -> asset
   val (~@) : pos -> asset
 
-  val give : asset -> Address.t -> unit
+  val give : int -> token -> Address.t -> unit
   val transfer : Address.t -> asset -> Address.t -> unit
   val send : Address.t -> int -> token -> Address.t -> unit
   val swap : Address.t -> asset -> Address.t -> asset -> unit
