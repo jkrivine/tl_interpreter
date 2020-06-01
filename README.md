@@ -1,5 +1,9 @@
 # tl_interpreter
 
+## Superquickstart
+1. Read the [sandbox tutorial](https://raw.githubusercontent.com/jkrivine/tl_interpreter/master/doc/sandbox_tutorial_1.png)
+2. ... together with the examples in bin/demo
+
 ## Quickstart
 
 1. Read the [env tutorial](https://raw.githubusercontent.com/jkrivine/tl_interpreter/master/doc/env_tutorial_1.png)
