@@ -365,6 +365,8 @@ module Legal = struct
         require_legal (source,target) ;
         let source_box = map_find_exn nexts source in
         let target_box = map_find_exn nexts target in
+        let source_owner = map_find_exn owners source in
+        let target_owner = map_find_exn owners target in
         (match map_find segments source_box with
           | Some segment ->
             map_set segments target_box segment ;
@@ -373,10 +375,8 @@ module Legal = struct
             map_remove segments target_box) ;
         map_remove nexts source_box ;
         map_remove nexts target ;
-        let target_owner = map_find_exn owners target in
         map_set owners source target_owner ;
         map_set nexts source target_box ;
-        let source_owner = map_find_exn owners source in
         map_set owners source_box source_owner ;
       end ;
 
