@@ -1,29 +1,4 @@
-(* The general theme here is: contracts are executed in a context specifying
-   `this`, which is an address.  There is a global storage which associates a
-   heterogenous map to each address.  This map can contain data, code, etc.
-
-   Given a key `k: int key`, which is a key to get a value of type int, the
-   result of accessing k depends on the current value of `this`. Since the
-   context is hidden in the pseudo-state monad, contracts can just say `read
-   k`. 2 instances of the same contract at 2 different addresses will return a
-   different value.
-
-   Those keys also map to code. So if there are two instances of a contract
-   `C`, one at address `ad1` and the other at address `ad2`, and `C` exposes
-   the key `k: (int -> int) key`, running `call ad1 C.k` and `call ad2 C.k` may
-   not run the same code.  *)
-
-  (*
-   * Global chain stuff
-   *)
-
-(* Global chain storage *)
-(* The global storage is of the form address -> 'a key -> 'a *)
-(* Where 'a key is the type of map keys for a data of type 'a *)
-
-
 module Nucleus = struct
-  open Tools
 
   module Types = struct
     type storage = (Address.t,HM.t) MP.t
@@ -37,18 +12,18 @@ module Nucleus = struct
       constructor: bool
     }
     type env = state*context
-    type 'a st = env -> ( ('a,(string*context*Printexc.raw_backtrace)) result * state )
-    type ('a,'b) code_identifier = ('a -> 'b st) HM.key
+    type 'a se = env -> ( ('a,(string*context*Printexc.raw_backtrace)) result * state )
+    type ('a,'b) code_identifier = ('a -> 'b se) HM.key
     type 'a data_identifier = 'a HM.key
   end
 
   include Types
 
-  module Monad = struct
-    type 'a st = 'a Types.st
-    type 'a unit_st = 'a Types.st
-    type ('a,'b) code_identifier = ('a,'b) Types.code_identifier
-    type 'a data_identifier = 'a Types.data_identifier
+  module Common = struct
+    type 'a st = 'a Types.se
+    type 'a unit_st = 'a Types.se
+    type ('a,'b) code_id = ('a,'b) Types.code_identifier
+    type 'a data_id = 'a Types.data_identifier
 
     let bind t1 t2 =
       fun (s,c) -> match t1 (s,c) with
@@ -62,7 +37,7 @@ module Nucleus = struct
     let (|?*) a default = a >>= function Some e -> return e | None -> return default
   end
 
-  include Monad
+  include Common
 
   let empty_state = {
     hmaps = MP.empty;
@@ -95,7 +70,6 @@ module Nucleus = struct
      else ())
 
   (* An execution environment specifies the current state and calling context *)
-
   let empty_env =
     (empty_state,empty_context)
 
@@ -103,12 +77,6 @@ module Nucleus = struct
   let state_set e s = (s,snd e)
   let context_get = snd
 
-  (*
-   * Pseudo-state monad stuff
-   *)
-
-  (* In-chain commands take an environment as input (ie. a (state,context) pair)
-     and return a (value result,state) pair as output *)
 
 
   let _require_admin context = context.this = Address.admin
@@ -124,7 +92,7 @@ module Nucleus = struct
   let ite_admin_caller t1 t2 (state,context) =
     (if _require_admin_caller context then t1 () else t2 ()) (state,context)
 
-  let is_equal t1 t2 =
+  let _is_equal t1 t2 =
     let* r1 = t1 in
     let* r2 = t2 in
     return (r1 = r2)
@@ -184,277 +152,273 @@ module Nucleus = struct
   let history : history = ref MP.empty
 end
 
-module Program = struct
-  include Nucleus.Monad
-  open Nucleus
-  open Tools
 
-  let is_admin =
-    ite_admin (fun () -> return true) (fun () -> return false)
 
-  let is_admin_caller =
-    ite_admin_caller (fun () -> return true) (fun () -> return false)
+module Fun = struct
 
-  let require_admin : unit st =
-    ite_admin (fun () -> return ()) (fun () -> error "not admin")
+  module Program = struct
+    include Nucleus.Common
+    open Nucleus
+    open Tools
 
-  let require_admin_s s : unit st =
-    ite_admin (fun () -> return ()) (fun () -> error ("not admin ("^s^")"))
+    let is_admin =
+      ite_admin (fun () -> return true) (fun () -> return false)
 
-  (* Initialize a new key for code *)
-  (* internal means that the code can only be called from other code at the same address. Use `callthis`. *)
-  let code ?(internal=false) () = HM.Key.create {name="<code>";pp=None;hidden=true;internal}
+    let is_admin_caller =
+      ite_admin_caller (fun () -> return true) (fun () -> return false)
 
-  let code_set code_identifier code (state,context) =
-    if context.constructor then
-      (get_in_hmap_option code_identifier >>= function
-        | Some _ -> error "Code already set at this identifier"
-        | None -> set_in_hmap code_identifier code ) (state,context)
-    else
-      (Error ("Cannot set code outside of constructor",context,Printexc.get_callstack 10), state)
+    let require_admin : unit st =
+      ite_admin (fun () -> return ()) (fun () -> error "not admin")
 
-  let code_private f (state,context) =
-    if context.constructor then
-      (let k = code () in code_set k f >> return k) (state,context)
-    else
-      (Error ("Cannot declare private code outside of constructor",context,Printexc.get_callstack 10), state)
+    let require_admin_s s : unit st =
+      ite_admin (fun () -> return ()) (fun () -> error ("not admin ("^s^")"))
 
-  let data ?pp ?show name =
-    let pp = match show with
-    | None -> pp
-    | Some s -> Some (fun fmt a -> Format.pp_print_string fmt (s a)) in
-    HM.Key.create {name;pp;hidden=false;internal=false}
+    (* Initialize a new key for code *)
+    (* internal means that the code can only be called from other code at the same address. Use `callthis`. *)
+    let code ?(internal=false) () = HM.Key.create {name="<code>";pp=None;hidden=true;internal}
 
-  (* internal doesn't apply to data *)
-  let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true;internal=false}
+    let code_set code_identifier code (state,context) =
+      if context.constructor then
+        (get_in_hmap_option code_identifier >>= function
+          | Some _ -> error "Code already set at this identifier"
+          | None -> set_in_hmap code_identifier code ) (state,context)
+      else
+        (Error ("Cannot set code outside of constructor",context,Printexc.get_callstack 10), state)
 
-  let data_set (data_identifier: 'a data_identifier) (v:'a) = set_in_hmap data_identifier v
+    let code_private f (state,context) =
+      if context.constructor then
+        (let k = code () in code_set k f >> return k) (state,context)
+      else
+        (Error ("Cannot declare private code outside of constructor",context,Printexc.get_callstack 10), state)
 
-  let data_get data_identifier = get_in_hmap data_identifier
+    let data ?pp ?show name =
+      let pp = match show with
+        | None -> pp
+        | Some s -> Some (fun fmt a -> Format.pp_print_string fmt (s a)) in
+      HM.Key.create {name;pp;hidden=false;internal=false}
 
-  (* Simple read-and-write convenience *)
-  let data_update data_identifier f =
-    let* v = data_get data_identifier in
-    set_in_hmap data_identifier (f v)
+    (* internal doesn't apply to data *)
+    let data_hidden () = HM.Key.create {name="<hidden>";pp=None;hidden=true;internal=false}
 
-  (* Convenience: define data that will only be visible to
-     - constructor methods
-     - any inheriting contract if the key is returned by the constructor
-  *)
-  let data_private v (state,context) =
-    if context.constructor then
-      (let d = data "<private>" in data_set d v >> return d) (state,context)
-    else
-      (error "Cannot declare private data outside of constructor") (state,context)
+    let data_set (data_identifier: 'a Nucleus.data_id) (v:'a) = set_in_hmap data_identifier v
+
+    let data_get data_identifier = get_in_hmap data_identifier
+
+    (* Simple read-and-write convenience *)
+    let data_update data_identifier f =
+      let* v = data_get data_identifier in
+      set_in_hmap data_identifier (f v)
+
+    (* Convenience: define data that will only be visible to
+       - constructor methods
+       - any inheriting contract if the key is returned by the constructor
+    *)
+    let data_private v (state,context) =
+      if context.constructor then
+        (let d = data "<private>" in data_set d v >> return d) (state,context)
+      else
+        (error "Cannot declare private data outside of constructor") (state,context)
 
 
 (*
  * Map-specific convenience functions
  *)
 
-  (* Consider [identifier] as some [map]'s name. Set the value of [k] in [map] to [v] *)
-  let map_set data_identifier k v =
-    data_update data_identifier (fun m -> MP.set m k v)
+    (* Consider [identifier] as some [map]'s name. Set the value of [k] in [map] to [v] *)
+    let map_set data_identifier k v =
+      data_update data_identifier (fun m -> MP.set m k v)
 
-  let map_remove data_identifier k =
-    data_update data_identifier (fun m -> MP.remove m k)
+    let map_remove data_identifier k =
+      data_update data_identifier (fun m -> MP.remove m k)
 
-  (* Consider [identifier] as some [map]'s name. Get the value of [k] in [map] *)
-  let map_find data_identifier k =
-    data_get data_identifier >>= fun map -> return (MP.find map k)
+    (* Consider [identifier] as some [map]'s name. Get the value of [k] in [map] *)
+    let map_find data_identifier k =
+      data_get data_identifier >>= fun map -> return (MP.find map k)
 
-  let map_find_exns s data_identifier k =
-    map_find data_identifier k >>= function Some v -> return v | None -> error s
+    let map_find_exns s data_identifier k =
+      map_find data_identifier k >>= function Some v -> return v | None -> error s
 
-  let map_find_exn data_identifier k =
-    map_find_exns "Not found" data_identifier k
+    let map_find_exn data_identifier k =
+      map_find_exns "Not found" data_identifier k
 
-  exception BadUpdate
-  let map_update data_identifier k ?default f =
-    try
-      data_update data_identifier (fun m ->
-          let v = match (MP.find m k,default) with
-            | (Some v, _) |(None, Some v) -> v
-            | (None,None) -> raise BadUpdate in
-          MP.set m k (f v))
-    with BadUpdate ->
-      error "Cannot update non-existent mapping without a default"
-
-
-  (* Utilities *)
-  (* Get context info from inside the execution *)
-  let get_caller (state,context) = (Ok context.caller,state)
-  let get_this (state,context) = (Ok context.this,state)
-
-  (* Time stuff, some of it admin-only *)
-  let time_get (state,_) =
-    (Ok state.time,state)
+    exception BadUpdate
+    let map_update data_identifier k ?default f =
+      try
+        data_update data_identifier (fun m ->
+            let v = match (MP.find m k,default) with
+              | (Some v, _) |(None, Some v) -> v
+              | (None,None) -> raise BadUpdate in
+            MP.set m k (f v))
+      with BadUpdate ->
+        error "Cannot update non-existent mapping without a default"
 
 
-  (* High-level chain method *)
-  (* import creates additional keys at the same address *)
-  (* internal call is just calling the method. otherwise do call or delegatcall *)
+    (* Utilities *)
+    (* Get context info from inside the execution *)
+    let get_caller (state,context) = (Ok context.caller,state)
+    let get_this (state,context) = (Ok context.this,state)
 
-  (* Run an instruction sequence on the empty environment *)
+    (* Time stuff, some of it admin-only *)
+    let time_get (state,_) =
+      (Ok state.time,state)
 
 
-  (* Run `f` at a fresh address in a constructor context *)
-  let create_contract name f args (state,context) =
-    let address = Address.next name in
-    let hmaps' = MP.set state.hmaps address HM.empty in
-    let state' = {state with hmaps=hmaps'} in
-    let context' = ({constructor=true;this=address;caller=context.this}) in
-    (f args >>= fun _ -> return address) (state',context')
+    (* High-level chain method *)
+    (* import creates additional keys at the same address *)
+    (* internal call is just calling the method. otherwise do call or delegatcall *)
 
-  let create_empty_contract name (state,context) =
-    (create_contract name (fun () -> return ()) ()) (state,context)
+    (* Run an instruction sequence on the empty environment *)
 
-  let create_user = create_empty_contract
 
-  (* A cooler alternative but it's annoying to write at call site :
-     create_contract (val Module) (args)
-     plus the arguments have to be packed into a tuple *)
-  (* Run `C.construct` at a fresh address in a constructor context *)
-  module type Contract = sig
-    type i
-    type o
-    val construct : i -> o st
-  end
+    (* Run `f` at a fresh address in a constructor context *)
+    let create_contract name f args (state,context) =
+      let address = Address.next name in
+      let hmaps' = MP.set state.hmaps address HM.empty in
+      let state' = {state with hmaps=hmaps'} in
+      let context' = ({constructor=true;this=address;caller=context.this}) in
+      (f args >>= fun _ -> return address) (state',context')
 
-  let create_contract'
-      (type a) (type b) name
-      (module C : Contract with type i = a and type o = b)
-      (args:a) (state,context) =
-    let address = Address.next name in
-    let hmaps' = MP.set state.hmaps address HM.empty in
-    let state' = {state with hmaps=hmaps'} in
-    let context' = ({constructor=true;this=address;caller=context.this}) in
-    ((C.construct args) >>= fun ret -> return (address,ret)) (state',context')
-  [@@ocaml.warning "-32"]
+    let create_empty_contract name (state,context) =
+      (create_contract name (fun () -> return ()) ()) (state,context)
 
-  (* Get the code given by `code_identifier` at `address`, run it in `context'` instead
-     of the current context *)
-  let _call context' address code_identifier args (state,context) =
-    if address <> context.this && (HM.Key.info code_identifier).internal then
-      (Error ("Cannot call internal code from another address",context,Printexc.get_callstack 10),state)
-    else
-    match _get_in_hmap_option code_identifier address state.hmaps with
-    | Some code -> code args (state,context')
-    | None -> (Error ("Code not found",context,Printexc.get_callstack 10),state)
+    let create_user = create_empty_contract
 
-  (* Get the code given by `code_identifier` at `address`, run it at `address` *)
-  let call address code_identifier args (state,context) =
-    let context' = ({constructor=false; this=address;caller=context.this}) in
-    _call context' address code_identifier args (state,context)
+    (* A cooler alternative but it's annoying to write at call site :
+       create_contract (val Module) (args)
+       plus the arguments have to be packed into a tuple *)
+    (* Run `C.construct` at a fresh address in a constructor context *)
+    module type Contract = sig
+      type i
+      type o
+      val construct : i -> o st
+    end
 
-  (* Get the code given by `code_identifier` at `address` but run it in the current context *)
-  let delegatecall address code_identifier args (state,context) =
-    _call context address code_identifier args (state,context)
+    let create_contract'
+        (type a) (type b) name
+        (module C : Contract with type i = a and type o = b)
+        (args:a) (state,context) =
+      let address = Address.next name in
+      let hmaps' = MP.set state.hmaps address HM.empty in
+      let state' = {state with hmaps=hmaps'} in
+      let context' = ({constructor=true;this=address;caller=context.this}) in
+      ((C.construct args) >>= fun ret -> return (address,ret)) (state',context')
+    [@@ocaml.warning "-32"]
 
-  (* Convenience, do a call at current address *)
-  let callthis chk args (state,context) =
-    delegatecall context.this chk args (state,context)
+    (* Get the code given by `code_identifier` at `address`, run it in `context'` instead
+       of the current context *)
+    let _call context' address code_identifier args (state,context) =
+      if address <> context.this && (HM.Key.info code_identifier).internal then
+        (Error ("Cannot call internal code from another address",context,Printexc.get_callstack 10),state)
+      else
+        match _get_in_hmap_option code_identifier address state.hmaps with
+        | Some code -> code args (state,context')
+        | None -> (Error ("Code not found",context,Printexc.get_callstack 10),state)
 
-  let require b =
-    b >>= function true -> return () | false -> error "require failed"
+    (* Get the code given by `code_identifier` at `address`, run it at `address` *)
+    let call address code_identifier args (state,context) =
+      let context' = ({constructor=false; this=address;caller=context.this}) in
+      _call context' address code_identifier args (state,context)
 
-  (* Run the given code (only allowed in a constructor, it is used to simulate
-     inheritance but `inherit` is a reserved keyword, so we use `import` *)
-  let import f (state,context) =
-    if context.constructor = true
-    then f (state,context)
-    else (Error ("cannot inherit outside of constructor",context,Printexc.get_callstack 10),state)
+    (* Get the code given by `code_identifier` at `address` but run it in the current context *)
+    let delegatecall address code_identifier args (state,context) =
+      _call context address code_identifier args (state,context)
 
-  let proxy address ?caller f =
-    require_admin_s "proxy" >> fun (state,context) ->
-    f (state,{context with this=address; caller=(caller |? context.caller)})
+    (* Convenience, do a call at current address *)
+    let callthis chk args (state,context) =
+      delegatecall context.this chk args (state,context)
 
-  (* Check if a contract has an entry for key `k` *)
-  let responds address (k:('a,'b) code_identifier) : bool st = fun (state,context) ->
-    (match _get_in_hmap_option k address state.hmaps with
-     | Some c -> return true
-     | None -> return false) (state,context)
+    let require b =
+      b >>= function true -> return () | false -> error "require failed"
 
-  module Echo = struct
+    (* Run the given code (only allowed in a constructor, it is used to simulate
+       inheritance but `inherit` is a reserved keyword, so we use `import` *)
+    let import f (state,context) =
+      if context.constructor = true
+      then f (state,context)
+      else (Error ("cannot inherit outside of constructor",context,Printexc.get_callstack 10),state)
+
+    let proxy address ?caller f =
+      require_admin_s "proxy" >> fun (state,context) ->
+      f (state,{context with this=address; caller=(caller |? context.caller)})
+
+    (* Check if a contract has an entry for key `k` *)
+    let responds address (k:('a,'b) Nucleus.code_id) : bool st = fun (state,context) ->
+      (match _get_in_hmap_option k address state.hmaps with
+       | Some _ -> return true
+       | None -> return false) (state,context)
+
+    module Echo = struct
     (*
      * 'echo' is printing from within the execution
      *)
 
-    (* Echo a string *)
-    (* (state,context) arg important for evaluation time of F.p functions *)
-    let echo str (state,context) =
-      (ite_admin
-         (fun () -> return (F.p Format.std_formatter "%s" str;F.cr ()))
-         (fun () -> return (F.p Format.std_formatter "%a | %a ⇒ " Address.pp context.caller Address.pp context.this;
-                            F.p Format.std_formatter "%s" str;F.cr ())))
-        (state,context)
+      (* Echo a string *)
+      (* (state,context) arg important for evaluation time of F.p functions *)
+      let echo str (state,context) =
+        (ite_admin
+           (fun () -> return (F.p Format.std_formatter "%s" str;F.cr ()))
+           (fun () -> return (F.p Format.std_formatter "%a | %a ⇒ " Address.pp context.caller Address.pp context.this;
+                              F.p Format.std_formatter "%s" str;F.cr ())))
+          (state,context)
 
-    let echo_data k =
-      let* v = data_get k in
-      echo (pp_to_str HM.pp_binding (HM.B (k,v)))
+      let echo_data k =
+        let* v = data_get k in
+        echo (pp_to_str HM.pp_binding (HM.B (k,v)))
 
-    let echo_pp s = Format.kfprintf (fun _ -> return ()) Format.std_formatter s
+      let echo_pp s = Format.kfprintf (fun _ -> return ()) Format.std_formatter s
 
-    let echo_address a =
-      echo (Address.show a)
+      let echo_address a =
+        echo (Address.show a)
 
-    let echo_trace (state,context) =
+      let echo_trace (state,context) =
         (return (F.p Format.std_formatter "%s"
-          (Printexc.raw_backtrace_to_string @@ Printexc.get_callstack 10))) (state,context)
+                   (Printexc.raw_backtrace_to_string @@ Printexc.get_callstack 10))) (state,context)
 
-    (* Echo the current state *)
-    let echo_state (state,context) =
-      (return (pp_state Format.std_formatter state)) (state,context)
+      (* Echo the current state *)
+      let echo_state (state,context) =
+        (return (pp_state Format.std_formatter state)) (state,context)
 
-    (* Echo the current context *)
-    let echo_context (state,context) =
-      (return (pp_context Format.std_formatter context)) (state,context)
+      (* Echo the current context *)
+      let echo_context (state,context) =
+        (return (pp_context Format.std_formatter context)) (state,context)
 
-    (* Pretty formatting for current (state,context) pair *)
-    let echo_env =
-      let line = "───────────────────────────────────────────" in
-      (fun e -> F.with_indent (fun () ->
-           (echo ("╭"^line^"╮") >>
-            echo_state) e)) >>
-      echo "" >>
-      (fun e -> F.with_indent (fun () ->
-           (echo ("├"^line^"┤")>>
-            echo_context) e)) >>
-      echo "" >> echo ("╰"^line^"╯")
+      (* Pretty formatting for current (state,context) pair *)
+      let echo_env =
+        let line = "───────────────────────────────────────────" in
+        (fun e -> F.with_indent (fun () ->
+             (echo ("╭"^line^"╮") >>
+              echo_state) e)) >>
+        echo "" >>
+        (fun e -> F.with_indent (fun () ->
+             (echo ("├"^line^"┤")>>
+              echo_context) e)) >>
+        echo "" >> echo ("╰"^line^"╯")
+    end
+    include Echo
   end
-  include Echo
-end
 
-module Chain = struct
-  (* Initialize a new key for data *)
+  module Chain = struct
 
+    open Nucleus
 
-  type storage = Nucleus.storage
-  type state = Nucleus.state
-  type context = Nucleus.context
-  type env = Nucleus.env
+    include Nucleus.Common
 
-  open Nucleus
-  open Tools
+    open Program
 
-  include Nucleus.Monad
+    let execute f =
+      match f empty_env with
+      | (Ok v,_) -> Some v
+      | (Error _,_) -> None
 
-  open Program
+    (* User sends a transactions *)
+    let txr user address code_identifier args =
+      require_admin_s "tx_user" >> fun (state ,context) ->
+      (call address code_identifier args) (state,{context with this=user})
 
-  let execute f =
-    match f empty_env with
-    | (Ok v,_) -> Some v
-    | (Error _,_) -> None
-
-  (* User sends a transactions *)
-  let txr user address code_identifier args =
-    require_admin_s "tx_user" >> fun (state ,context) ->
-    (call address code_identifier args) (state,{context with this=user})
-
-  let tx user address code_identifier args (state,context) =
-    match txr user address code_identifier args (state,context) with
-    | (Ok _, new_state) -> (Ok (), new_state)
-    | (Error (v,c,callstack),_) ->
+    let tx user address code_identifier args (state,context) =
+      match txr user address code_identifier args (state,context) with
+      | (Ok _, new_state) -> (Ok (), new_state)
+      | (Error (v,c,callstack),_) ->
         let sf = Format.std_formatter in
         F.p sf "Error: %s" v;
         F.cr ();
@@ -467,31 +431,32 @@ module Chain = struct
         F.cr ();
         (Ok (), state)
 
-  let tx_create user name t args =
-    require_admin_s "tx_create" >> fun (state,context) ->
-    (create_contract name t args) (state,{context with this=user})
+    let tx_create user name t args =
+      require_admin_s "tx_create" >> fun (state,context) ->
+      (create_contract name t args) (state,{context with this=user})
 
-  (* not natively available in ethereum, included for convenience *)
-  let tx_proxy user code = proxy user code
+    (* not natively available in ethereum, included for convenience *)
+    let tx_proxy user code = proxy user code
 
-  let time_set i =
-    require_admin_s "time_set" >> (fun (state,_context) ->
-        (Ok (),{state with time=i}))
+    let time_set i =
+      require_admin_s "time_set" >> (fun (state,_context) ->
+          (Ok (),{state with time=i}))
 
-  let time_incr i =
-    require_admin_s "time_incr" >> fun (state,_context) ->
-    (Ok (),{state with time=state.time+i})
+    let time_incr i =
+      require_admin_s "time_incr" >> fun (state,_context) ->
+      (Ok (),{state with time=state.time+i})
 
-  let state_save name =
-    require_admin_s "state_save" >> fun (state,context) ->
-    (return (history := MP.set !history name state)) (state,context)
+    let state_save name =
+      require_admin_s "state_save" >> fun (state,context) ->
+      (return (history := MP.set !history name state)) (state,context)
 
-  let state_restore name =
-    require_admin_s "state_restore" >> fun _env ->
-    let state' = MP.find_exn !history name in
-    (Ok (),state')
+    let state_restore name =
+      require_admin_s "state_restore" >> fun _env ->
+      let state' = MP.find_exn !history name in
+      (Ok (),state')
 
-  include Echo
+    include Echo
+  end
 end
 
 
@@ -506,6 +471,8 @@ module Imp = struct
       | EnvException (s,c,cs) ->
         Some (s^"\n"^pp_to_str Nucleus.pp_context c^"\n"^(Printexc.raw_backtrace_to_string cs))
       | _ -> None)
+
+  (* The imperative/functional conversion happens with the [imp] and [unimp] functions. *)
 
   let imp f =
     match f !env with
@@ -526,9 +493,9 @@ module Imp = struct
       env := env_bk;
       (Error (m,e,cs), Nucleus.state_get !env)
 
-  module Monad = struct
-    type 'a data_identifier = 'a Nucleus.data_identifier
-    type ('a,'b) code_identifier = ('a,'b) Nucleus.code_identifier
+  module Common = struct
+    type 'a data_id = 'a Nucleus.data_id
+    type ('a,'b) code_id = ('a,'b) Nucleus.code_id
 
     let bind t1 t2 = t2 t1
     let (>>=) = bind
@@ -539,11 +506,11 @@ module Imp = struct
     let (|?*) = Tools.(|?)
   end
 
-  module FP = Program
-  module FC = Chain
+  module FP = Fun.Program
+  module FC = Fun.Chain
 
   module Program = struct
-    include Monad
+    include Common
 
     let code = FP.code
 
@@ -640,7 +607,7 @@ module Imp = struct
 
   module Chain = struct
 
-    include Monad
+    include Common
 
     let tx user address code_identifier args = imp @@ FC.tx user address code_identifier args
 

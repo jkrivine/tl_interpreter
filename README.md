@@ -12,6 +12,9 @@
 4. Read the [dec tutorial](https://raw.githubusercontent.com/jkrivine/tl_interpreter/master/doc/dec_tutorial_1.png)
 5. Run and read `loan.ml` (`dune exec ./bin/loan.exe`).
 
+## Documentation
+Run `dune build @doc` then open `_build/default/_doc/_html/lib/index.html` in your browser.
+
 ## Overview of `lib/`:
 * `lib/env.ml` contains the ethereum-style execution environment.
 * `lib/c.mli` and `lib/env.mli` contain most of the interface for the code in `lib/env.ml`, they are good files to read.

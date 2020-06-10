@@ -1,16 +1,23 @@
+(** {e Contract}. Implements basic ERC20-like functionality. *)
 open Tools
 open Env.Imp.Program
 
+(** A simple [address->int] map *)
 let balances = data ~pp:(MP.pp Address.pp Format.pp_print_int) "balances"
+
+(** Whoever has minting power on the token *)
 let owner = data ~pp:Address.pp "owner"
+
 let balance = code ()
 let transfer = code ()
 let transfer_up_to = code ()
 let transfer_all = code ()
+
+(** admin only *)
 let mint_for = code ()
 
-(* Also an external callback for others *)
-let on_token_receive : (Address.t*Address.t*int,unit) code_identifier = code ()
+(** All transfers attempt to call [on_token_receive] on the receiving contract. Ignored if method is not implemented by the contract. *)
+let on_token_receive : (Address.t*Address.t*int,unit) code_id = code ()
 
 let construct () =
 

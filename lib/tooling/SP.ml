@@ -1,3 +1,5 @@
+(** Glue above [Core.Set.Poly] that removes argument names. *)
+
 module S = Core.Set.Poly
 type 'a t = 'a S.t
 let pp fmt_v fmt m =

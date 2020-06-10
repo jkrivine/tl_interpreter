@@ -1,4 +1,6 @@
-open Imperative
+module P = Env.Imp.Program
+module C = Env.Imp.Chain
+
 (* We define an onchain contract. All public data and code are members of the
    module structure.
 

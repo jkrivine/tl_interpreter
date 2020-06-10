@@ -1,4 +1,5 @@
-open Imperative
+module P = Env.Imp.Program
+module C = Env.Imp.Chain
 (* In this example, C1 can echo a stored phrase and can change its phrase. A
    custom authorization code lets each instanciation of C1 apply different
    rules to determine who can change its phrase *)

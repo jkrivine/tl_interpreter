@@ -19,7 +19,7 @@ module Make () = struct
     | Committing (s,t) -> commit s t
     | _ -> P.error @@ "Cannot call "^operation^" outside of pull/commit"
 
-  let if_reducing operation fn =
+  let _if_reducing operation fn =
     if_reducing_dir operation ~pull:fn ~commit:fn
 
   (* only in a segment context *)
@@ -212,8 +212,6 @@ module Make () = struct
     end ;
     set_payoffs_baseline () ;
     user
-
-  let users l = List.map (fun u -> user ~defaults:true u) l
 
   let alice = user ~defaults:false "alice"
   let bob = user ~defaults:false "bob"

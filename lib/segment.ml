@@ -1,9 +1,16 @@
+(** {e Contract}. Implements basic Segment skeleton. *)
 open Env.Imp.Program
 
-(* To be implement by inheritors *)
-let commit : (Dec.parties,unit) code_identifier = code ()
-let pull : (Dec.parties,unit) code_identifier = code ()
-let on_connect : (Dec.parties,unit) code_identifier = code ()
+(** To be implement by inheritors *)
+let commit : (Dec.parties,unit) code_id = code ()
+
+(** To be implement by inheritors *)
+let pull : (Dec.parties,unit) code_id = code ()
+
+(** To be implement by inheritors *)
+let on_connect : (Dec.parties,unit) code_id = code ()
+
+(** Transparently proxy all grow calls *)
 let grow = code ()
 
 let construct dec =

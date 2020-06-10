@@ -1,4 +1,5 @@
-open Imperative
+module P = Env.Imp.Program
+module C = Env.Imp.Chain
 
 module Loan = struct
 

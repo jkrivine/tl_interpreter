@@ -112,15 +112,6 @@ module Make(D:sig val d : Address.t end) = struct
     List.map (fun (_,l) -> l) (triples_tls' poss)
 
 
-  let traverse pos seen =
-
-
-    let rec t' pos = match call dec next_of pos with
-      | None -> []
-      | Some pos' -> (pos,Option.get (call dec segment_of pos'),pos')::(t' pos')
-    in t' pos
-
-
   let trail_tls poss =
     let rec r last = function [] -> last | (p,_,p')::xs -> p::(r [p'] xs) in
     List.map (fun (p,l) -> r [p] l) (triples_tls' poss)
@@ -289,7 +280,7 @@ module Make(D:sig val d : Address.t end) = struct
             ~f:(fun l ->
             Base.List.map l
               ~f:(fun (u,s,v) ->
-                  let oi = Base.List.findi contractions ~f:(fun i (d,u',s',v') -> v=v') in
+                  let oi = Base.List.findi contractions ~f:(fun _ (_,_,_,v') -> v=v') in
                   let (i,(d,_,_,_)) = Option.get @@ oi in
                   (u,s,v,i,d))) in
         P.echo_pp "Playing sequence:\n %s\n"
@@ -336,6 +327,7 @@ module Make(D:sig val d : Address.t end) = struct
 end
 
 
+(** Compute all possible payoffs. Takes a starting position [pos]. Also a dec address [d]. The time for a specific pull.commit on a specific segment can be set with the optional [~times] (a list of (segment,direction,time) triples). [~from] specifies the name of the saved state to which payoffs should be compared (see [Chain.state_save]). *)
 let payoffs ?(compact=false) ?(times=[]) ~from d pos =
   let module U = Make(struct let d = d end) in
   U.unroll ~compact ~times ~from [pos]
