@@ -318,7 +318,7 @@ module Make(D:sig val d : Address.t end) = struct
                  if amount = 0 then () else
                  let prefix = if amount >= 0 then "+" else "" in
                  let index_str = if index = "" then "" else ("."^index) in
-                 F.p fmt "%a%s: %s%d%a" Address.pp addr index_str prefix amount Dec.pp_token tk;
+                 F.p fmt "%a%s: %s%d%a" Address.pp addr index_str prefix amount Address.pp tk;
                  F.cr ();
               ));
         P.echo "";

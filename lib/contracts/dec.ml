@@ -138,10 +138,8 @@ module User = struct
 
     (*let box_of            : (A.t, A.t option) code_id = code ()*)
     code_set box_of begin fun p ->
-      if callthis is_pos p then
-        Some (map_find_exn nexts p)
-      else
-        None
+      require (callthis is_pos p);
+      map_find nexts p
     end;
 
     code_set new_pos
@@ -282,7 +280,7 @@ module User = struct
         match callthis segment_of p with
         | None -> (match callthis owner_of_opt p with
             | None -> p
-            | Some o -> o)
+            | Some o -> callthis master_of o)
         | Some s -> s
       end ;
 
@@ -300,8 +298,7 @@ module User = struct
 
     code_set next_of
       begin fun p ->
-        require (callthis is_pos p || test_collectable p);
-        if test_collectable p then None else
+        require (callthis is_pos p);
         let b = map_find_exn nexts p in
         map_find nexts b
       end

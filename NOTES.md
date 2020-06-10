@@ -18,8 +18,8 @@ The problem is: if segment `s` between `p` and `p'` receives an order to reduce 
 So we introduce an additional concept, `master_of`.
 
 If `a` is a pos in a tl with a segment, `master_of a = segment_of a`
-If `a` is a pos in a tl without a segment but an owner, `master_of a = owner_of a`
-Otherwise, `master_of a = a`. This applies to users and regular contracts.
+If `a` is a pos in a tl without a segment but an owner, `master_of a = master_of (owner_of a)`
+Otherwise, `master_of a = a`. This applies to users and regular contracts. If `a` is a pos, has no segment and has no owner, there's a bug in Dec.
 
 Now, all `s` has to do is check `caller = master_of (owner_of p)`
 
